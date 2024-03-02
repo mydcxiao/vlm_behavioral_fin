@@ -1,0 +1,26 @@
+{
+    "llama": {
+        "prompt": "{inst}"
+    },
+    "llama-chat": {
+        "prompt": "{inst}"
+    },
+    "gemma": {
+        "prompt": "{inst}"
+    },
+    "gemma-it": {
+        "prompt": "{inst}"
+    },
+    "mistral": {
+        "prompt": "{inst}"
+    },
+    "mistral-instruct": {
+        "prompt": "{inst}"
+    },
+    "gpt-3.5": {
+        "prompt": "{inst}"
+    },
+    "gpt-4": {
+        "prompt": "{inst}"
+    }
+}
