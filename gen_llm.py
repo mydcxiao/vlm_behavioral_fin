@@ -2,24 +2,36 @@ import requests
 import json
 import time
 import argparse
+import os
+import datetime as dt
 import numpy as np
+import pandas as pd
 from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
 from transformers import AutoTokenizer, AutoModelForCausalLM, GemmaTokenizer
 from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForPreTraining, AutoModel
+from transformers import AutoConfig, GenerationConfig
 from transformers import pipeline
+
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default="llama", help='Model name')
+    parser.add_argument('--model', type=str, default="llama-chat", help='Model name')
     parser.add_argument('--api', action='store_true', default=False, help='Use API')
     parser.add_argument('--token', type=str, default="", help='API token')
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
     parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
+    parser.add_argument('--stock_path', type=str, default="data/stock_history.csv", help='history stock data file path')
+    parser.add_argument('--eps_path', type=str, default="data/eps_history/", help='history eps data dir path')
+    parser.add_argument('--ticker', type=str, default="AAPL", help='stock ticker')
+    parser.add_argument('--start_time', type=str, default="2020-12-01", help='start time')
+    parser.add_argument('--end_time', type=str, default="2021-01-01", help='end time')
+    parser.add_argument('--narrative', action='store_true', default=False, help='use narrative input string')
     
     return parser.parse_args()
+
 
 def load_json(prompt_path, model_path):
     with open(prompt_path, "r") as prompt_file:
@@ -30,14 +42,21 @@ def load_json(prompt_path, model_path):
 
     return prompt_dict, model_dict
 
+
+def load_stock_data(path):
+    prices = pd.read_csv(path, header=[0, 1], index_col=0)
+    return prices
+
+
 class client(object):
-    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None):
+    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None):
         self.url = url
         self.headers = headers
         self.openai = openai
         self.client = OpenAI() if openai else None
         self.model = model
         self.pipe = pipe
+        self.gen_cfg = gen_cfg
     
     def query(self, message):
         if self.openai:
@@ -51,9 +70,11 @@ class client(object):
             response = requests.post(self.url, headers=self.headers, json=payload)
             return response.json()[0]['generated_text']
         else:
-            return self.pipe(message)[0]['generated_text']
+            response = self.pipe(message, generation_config=self.gen_cfg, 
+                                 clean_up_tokenization_spaces=True)[0]['generated_text']
+            return response
+ 
             
-
 def init_model(model_id, model_dict, api=False, token=None):
     if api:
         if model_id in model_dict:
@@ -70,31 +91,97 @@ def init_model(model_id, model_dict, api=False, token=None):
     else:
         try:
             model_id = model_dict[model_id]['model_id']
-            pipe = pipeline("text-generation", model=model_id)
-            return client(pipe=pipe)
+            cfg = AutoConfig.from_pretrained(model_id)
+            gen_cfg = GenerationConfig.from_pretrained(model_id)
+            if gen_cfg.max_length == 20:
+                gen_cfg.max_length = 4096
+            gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
+            cfg.pad_token_id if hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            pipe = pipeline("text-generation", model=model_id, tokenizer=tokenizer, device='cuda', torch_dtype=cfg.torch_dtype)
+            return client(pipe=pipe, gen_cfg=gen_cfg)
         except Exception as e:
             raise e
+  
             
 def construct_message(model, prompt_dict, instruction):
     prompt_template = prompt_dict[model]['prompt']
-    message = prompt_template.format(inst=instruction)
+    message = prompt_template.format(*instruction)
     return message
 
-# def construct_assistant_message():
-#     pass
+
+def construct_assistant_message():
+    pass
+
+
+def construct_instruction(args):
+    question = "EPS surprise prediction based off historical stocks' price and EPS data."
+    background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
+    criterion = "According to the historical stock price and EPS data, predict the EPS surprise for the next quarter."
+    stock_s, stock_n = construct_stock_history(args.stock_path, args.ticker, args.start_time, args.end_time)
+    eps_s, eps_n = construct_eps_history(args.eps_path, args.ticker, args.start_time, args.end_time)
+    if args.narrative:
+        instruction = [question, background, criterion, stock_n, eps_n]
+    else:
+        instruction = [question, background, criterion, stock_s, eps_s]
+    return instruction
+
+
+def construct_stock_history(dir, ticker, start, end):
+    dataframe = load_stock_data(dir)
+    comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
+    comp_stock = comp_stock.loc[start:end]
+    comp_stock = comp_stock[['Open', 'Close']]
+    comp_stock.columns.name = None
+    comp_stock.reset_index(inplace=True)
+    structured_str = comp_stock.to_string(header=True, index=False)
+    narrative = '\n'.join([
+                f"On {row.Date}, the stock opened at {row.Open} and closed at {row.Close}."
+                for row in comp_stock.itertuples()
+                ])
+    
+    return structured_str, narrative
+
+
+def construct_eps_history(dir, ticker, start, end):
+    files = os.listdir(dir)
+    file = None
+    for f in files:
+        if ticker in f:
+            file = f
+            break
+    if not file:
+        raise FileNotFoundError(f"No EPS data found for {ticker}")
+    with open(os.path.join(dir,file), "r") as f:
+        eps_dict = json.load(f)
+    f.close()
+    quarterly_eps = eps_dict['quarterlyEarnings']
+    quarterly_eps_df = pd.DataFrame(quarterly_eps)
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
+    structured_str = quarterly_eps_df.to_string(header=True, index=False)
+    narrative = '\n'.join([
+                f"For the quarter ending {row.fiscalDateEnding}, the EPS was {row.reportedEPS} reported on {row.reportedDate} and the estimated EPS was {row.estimatedEPS}. The surprise was {row.surprise} with a percentage of {row.surprisePercentage}."
+                for row in quarterly_eps_df.itertuples()
+                ])
+   
+    return structured_str, narrative
+
 
 def main():
     args = args_parser()
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
     client = init_model(args.model, model_dict, args.api, args.token)
-    instruction = "Give me the prediction of the trend of the stock price for the next 5 days." + \
-        "Your final answer should be up or down, in the form of \\boxed{{answer}}, at the end of your response."
+    instruction = construct_instruction(args)
     message = construct_message(args.model, prompt_dict, instruction)
     response = client.query(message)
+    os.makedirs(args.output_dir, exist_ok=True)
+    json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
     print(response)
+
 
 if __name__ == "__main__":
     main()
+
 
 # processor = AutoProcessor.from_pretrained("liuhaotian/llava-v1.5-7b")
 # model = AutoModelForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b")

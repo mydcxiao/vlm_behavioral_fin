@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import datetime as dt
-import matplotlib.pyplot as plt
-import yahoo_fin.stock_info as si
 import requests
 from bs4 import BeautifulSoup
 
@@ -30,8 +28,8 @@ def fetch_and_save_prices(tickers, start=None, end=None):
     start = dt.datetime(2000, 1, 1).strftime('%Y-%m-%d') if not start else start # Start date
     end = dt.datetime.now().strftime('%Y-%m-%d') if not end else end # Format today's date
     prices = yf.download(tickers, start=start, end=end)
-    prices = prices['Close']  # We're interested in the closing prices
-    prices.to_csv(f'SP500_prices_from_{start}_to_{end}.csv')  # Save to a CSV file
+    # prices = prices['Close']  # We're interested in the closing prices
+    prices.to_csv(f'sp500_prices_from_{start}_to_{end}.csv')  # Save to a CSV file
     return prices
 
 # Main script
