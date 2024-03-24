@@ -3,9 +3,11 @@ import json
 import time
 import argparse
 import os
+import io
 import datetime as dt
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
@@ -23,8 +25,8 @@ def args_parser():
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
     parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
-    parser.add_argument('--stock_path', type=str, default="data/stock_history.csv", help='history stock data file path')
-    parser.add_argument('--eps_path', type=str, default="data/eps_history/", help='history eps data dir path')
+    parser.add_argument('--stock_file', type=str, default="data/stock_history.csv", help='history stock data file path')
+    parser.add_argument('--eps_dir', type=str, default="data/eps_history/", help='history eps data dir path')
     parser.add_argument('--ticker', type=str, default="AAPL", help='stock ticker')
     parser.add_argument('--start_time', type=str, default="2020-12-01", help='start time')
     parser.add_argument('--end_time', type=str, default="2021-01-01", help='end time')
@@ -118,8 +120,8 @@ def construct_instruction(args):
     question = "EPS surprise prediction based off historical stocks' price and EPS data."
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
     criterion = "According to the historical stock price and EPS data, predict the EPS surprise for the next quarter."
-    stock_s, stock_n = construct_stock_history(args.stock_path, args.ticker, args.start_time, args.end_time)
-    eps_s, eps_n = construct_eps_history(args.eps_path, args.ticker, args.start_time, args.end_time)
+    stock_s, stock_n = construct_stock_history(args.stock_file, args.ticker, args.start_time, args.end_time)
+    eps_s, eps_n = construct_eps_history(args.eps_dir, args.ticker, args.start_time, args.end_time)
     if args.narrative:
         instruction = [question, background, criterion, stock_n, eps_n]
     else:
@@ -127,8 +129,8 @@ def construct_instruction(args):
     return instruction
 
 
-def construct_stock_history(dir, ticker, start, end):
-    dataframe = load_stock_data(dir)
+def construct_stock_history(file, ticker, start, end):
+    dataframe = file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock = comp_stock.loc[start:end]
     comp_stock = comp_stock[['Open', 'Close']]
@@ -167,10 +169,73 @@ def construct_eps_history(dir, ticker, start, end):
     return structured_str, narrative
 
 
+def construct_images(file, dir, ticker, start, end):
+    dataframe = file
+    comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
+    comp_stock = comp_stock.loc[start:end]
+    comp_stock = comp_stock[['Open', 'Close']]
+    comp_stock.columns.name = None
+    comp_stock.reset_index(inplace=True)
+    files = os.listdir(dir)
+    file = None
+    for f in files:
+        if ticker in f:
+            file = f
+            break
+    if not file:
+        raise FileNotFoundError(f"No EPS data found for {ticker}")
+    with open(os.path.join(dir,file), "r") as f:
+        eps_dict = json.load(f)
+    f.close()
+    quarterly_eps = eps_dict['quarterlyEarnings']
+    quarterly_eps_df = pd.DataFrame(quarterly_eps)
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
+    # Define an offset for the markers
+    offset = 15
+    # Plotting
+    plt.figure(figsize=(10, 5))
+    all_dates = pd.date_range(start, end, freq='D')
+    comp_stock['Date'] = pd.to_datetime(comp_stock['Date'])
+    comp_stock = comp_stock.set_index('Date').reindex(all_dates).reset_index().rename(columns={'index': 'Date'})
+    comp_stock['Open'] = comp_stock['Open'].interpolate(method='linear')
+    comp_stock['Close'] = comp_stock['Close'].interpolate(method='linear')
+    comp_stock['Date'] = comp_stock['Date'].dt.strftime('%Y-%m-%d')
+    plt.plot(comp_stock['Date'], comp_stock['Close'], label='Stock Price', zorder=5)  # Plot stock price
+    # Marking the EPS report date with "R"
+    eps_price = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['reportedDate']), 'Close']
+    eps_date = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['reportedDate']), 'Date']
+    plt.scatter(eps_date, eps_price + offset, color='red', marker='o', s=25, zorder=10, label='EPS Report Date')
+    # Marking the Fiscal End Date with "F"
+    fiscal_price = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['fiscalDateEnding']), 'Close']
+    fiscal_date = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['fiscalDateEnding']), 'Date']
+    plt.scatter(fiscal_date, fiscal_price + offset, color='blue', marker='o', s=25, zorder=10, label='EPS Fiscal End Date')
+
+    xticks = list(set([start, end] + eps_date.values.tolist() + fiscal_date.values.tolist()))
+    xlabels = list(set([start, end] + eps_date.values.tolist() + fiscal_date.values.tolist()))
+    plt.legend()
+    plt.xlabel('Date')
+    plt.ylabel('Stock Price')
+    plt.xticks(xticks, xlabels, rotation=25)
+    plt.tick_params(length=2, direction='in')
+    plt.title('Stock Price Chart with EPS Dates')
+    plt.grid(axis='y', linestyle='-', alpha=1)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)  # Important: move the buffer's start to the beginning after saving
+    
+    image = Image.open(buf)
+    buf.close()
+    
+    return image
+
+
 def main():
     args = args_parser()
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
     client = init_model(args.model, model_dict, args.api, args.token)
+    stock_df = load_stock_data(args.stock_file)
+    args.stock_file = stock_df
     instruction = construct_instruction(args)
     message = construct_message(args.model, prompt_dict, instruction)
     response = client.query(message)
