@@ -31,6 +31,7 @@ def args_parser():
     parser.add_argument('--start_time', type=str, default="2020-12-01", help='start time')
     parser.add_argument('--end_time', type=str, default="2021-01-01", help='end time')
     parser.add_argument('--narrative', action='store_true', default=False, help='use narrative input string')
+    parser.add_argument('--image', action='store_true', default=False, help='use image input string')
     
     return parser.parse_args()
 

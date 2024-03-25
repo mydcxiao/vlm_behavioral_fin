@@ -52,5 +52,8 @@
     },
     "gpt-4": {
         "model_id": "gpt-4"
+    },
+    "llava": {
+        "model_id": "liuhaotian/llava-v1.6-vicuna-7b"
     }
 }
