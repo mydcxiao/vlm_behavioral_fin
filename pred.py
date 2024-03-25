@@ -14,7 +14,11 @@ from openai import OpenAI
 from transformers import AutoTokenizer, AutoModelForCausalLM, GemmaTokenizer
 from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForPreTraining, AutoModel
 from transformers import AutoConfig, GenerationConfig
+from transformers import BitsAndBytesConfig
 from transformers import pipeline
+import accelerate
+
+import torch
 
 
 def args_parser():
@@ -32,6 +36,7 @@ def args_parser():
     parser.add_argument('--end_time', type=str, default="2021-01-01", help='end time')
     parser.add_argument('--narrative', action='store_true', default=False, help='use narrative input string')
     parser.add_argument('--image', action='store_true', default=False, help='use image input string')
+    parser.add_argument('--quant', action='store_true', default=False, help='use quantization')
     
     return parser.parse_args()
 
@@ -52,7 +57,7 @@ def load_stock_data(path):
 
 
 class client(object):
-    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None):
+    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None, image_input=False):
         self.url = url
         self.headers = headers
         self.openai = openai
@@ -60,8 +65,10 @@ class client(object):
         self.model = model
         self.pipe = pipe
         self.gen_cfg = gen_cfg
+        self.image_input = image_input
     
-    def query(self, message):
+    def query(self, message, image=None):
+        # TODO: Add image input for API
         if self.openai:
             completion = self.client.chat.completions.create(
                 model=self.model,
@@ -73,12 +80,15 @@ class client(object):
             response = requests.post(self.url, headers=self.headers, json=payload)
             return response.json()[0]['generated_text']
         else:
-            response = self.pipe(message, generation_config=self.gen_cfg, 
-                                 clean_up_tokenization_spaces=True)[0]['generated_text']
+            if self.image_input and image is not None:
+                response = self.pipe(image, prompt=message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text']
+            else:
+                response = self.pipe(message, generation_config=self.gen_cfg, 
+                                    clean_up_tokenization_spaces=True)[0]['generated_text']
             return response
  
             
-def init_model(model_id, model_dict, api=False, token=None):
+def init_model(model_id, model_dict, api=False, token=None, image=False, quant=False):
     if api:
         if model_id in model_dict:
             if 'API_URL' in model_dict[model_id]:
@@ -97,12 +107,25 @@ def init_model(model_id, model_dict, api=False, token=None):
             cfg = AutoConfig.from_pretrained(model_id)
             gen_cfg = GenerationConfig.from_pretrained(model_id)
             if gen_cfg.max_length == 20:
-                gen_cfg.max_length = 4096
+                gen_cfg.max_length = 4096*2
             gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
             cfg.pad_token_id if hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            pipe = pipeline("text-generation", model=model_id, tokenizer=tokenizer, device='cuda', torch_dtype=cfg.torch_dtype)
-            return client(pipe=pipe, gen_cfg=gen_cfg)
+            if quant:
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16
+                )
+            if image:
+                if quant:
+                    pipe = pipeline("image-to-text", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype, model_kwargs={"quantization_config": quantization_config})
+                else:  
+                    pipe = pipeline("image-to-text", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype)        
+            else:
+                if quant:
+                    pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype, model_kwargs={"quantization_config": quantization_config})
+                else:  
+                    pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype)
+            return client(pipe=pipe, gen_cfg=gen_cfg, image_input=image)
         except Exception as e:
             raise e
   
@@ -225,21 +248,25 @@ def construct_images(file, dir, ticker, start, end):
     plt.savefig(buf, format='png')
     buf.seek(0)  # Important: move the buffer's start to the beginning after saving
     
-    image = Image.open(buf)
-    buf.close()
+    # image = Image.open(buf)
+    # buf.close()
     
-    return image
+    return buf
 
 
 def main():
     args = args_parser()
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
-    client = init_model(args.model, model_dict, args.api, args.token)
+    client = init_model(args.model, model_dict, args.api, args.token, args.image, args.quant)
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     instruction = construct_instruction(args)
+    instruction.pop(-2) if args.image else None
     message = construct_message(args.model, prompt_dict, instruction)
-    response = client.query(message)
+    image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
+    image = Image.open(image_buf) if args.image else None
+    response = client.query(message, image)
+    image_buf.close() if args.image else None
     os.makedirs(args.output_dir, exist_ok=True)
     json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
     print(response)
@@ -247,20 +274,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# processor = AutoProcessor.from_pretrained("liuhaotian/llava-v1.5-7b")
-# model = AutoModelForCausalLM.from_pretrained("liuhaotian/llava-v1.5-7b")
-
-# processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-# model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
-
-# prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-# url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-# image = Image.open(requests.get(url, stream=True).raw)
-
-# inputs = processor(text=prompt, images=image, return_tensors="pt")
-
-# # Generate
-# generate_ids = model.generate(**inputs, max_length=30)
-# processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
