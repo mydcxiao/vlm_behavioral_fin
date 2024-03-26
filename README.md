@@ -1,5 +1,11 @@
 # Recency Bias of Large Language Model in Predicting Market
 
+## TODO:
+✅ implement LLM inference
+✅ implement multimodal inference
+:x: test prompt template
+:x: build batched inference for massive data
+
 ## Inference
 LLM:
 ```shell
