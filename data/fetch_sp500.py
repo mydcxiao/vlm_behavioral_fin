@@ -29,7 +29,7 @@ def fetch_and_save_prices(tickers, start=None, end=None):
     end = dt.datetime.now().strftime('%Y-%m-%d') if not end else end # Format today's date
     prices = yf.download(tickers, start=start, end=end)
     # prices = prices['Close']  # We're interested in the closing prices
-    prices.to_csv(f'sp500_prices_from_{start}_to_{end}.csv')  # Save to a CSV file
+    prices.to_csv(f'stock_history.csv')  # Save to a CSV file
     return prices
 
 # Main script

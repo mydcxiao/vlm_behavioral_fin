@@ -8,6 +8,8 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import mplfinance as mpf
+import matplotlib.dates as mdates
 from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
@@ -197,7 +199,6 @@ def construct_images(file, dir, ticker, start, end):
     dataframe = file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock = comp_stock.loc[start:end]
-    comp_stock = comp_stock[['Open', 'Close']]
     comp_stock.columns.name = None
     comp_stock.reset_index(inplace=True)
     files = os.listdir(dir)
@@ -214,42 +215,42 @@ def construct_images(file, dir, ticker, start, end):
     quarterly_eps = eps_dict['quarterlyEarnings']
     quarterly_eps_df = pd.DataFrame(quarterly_eps)
     quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
-    # Define an offset for the markers
-    offset = 15
-    # Plotting
-    plt.figure(figsize=(10, 5))
-    all_dates = pd.date_range(start, end, freq='D')
-    comp_stock['Date'] = pd.to_datetime(comp_stock['Date'])
-    comp_stock = comp_stock.set_index('Date').reindex(all_dates).reset_index().rename(columns={'index': 'Date'})
-    comp_stock['Open'] = comp_stock['Open'].interpolate(method='linear')
-    comp_stock['Close'] = comp_stock['Close'].interpolate(method='linear')
-    comp_stock['Date'] = comp_stock['Date'].dt.strftime('%Y-%m-%d')
-    plt.plot(comp_stock['Date'], comp_stock['Close'], label='Stock Price', zorder=5)  # Plot stock price
-    # Marking the EPS report date with "R"
-    eps_price = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['reportedDate']), 'Close']
-    eps_date = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['reportedDate']), 'Date']
-    plt.scatter(eps_date, eps_price + offset, color='red', marker='o', s=25, zorder=10, label='EPS Report Date')
-    # Marking the Fiscal End Date with "F"
-    fiscal_price = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['fiscalDateEnding']), 'Close']
-    fiscal_date = comp_stock.loc[comp_stock['Date'].isin(quarterly_eps_df['fiscalDateEnding']), 'Date']
-    plt.scatter(fiscal_date, fiscal_price + offset, color='blue', marker='o', s=25, zorder=10, label='EPS Fiscal End Date')
 
-    xticks = list(set([start, end] + eps_date.values.tolist() + fiscal_date.values.tolist()))
-    xlabels = list(set([start, end] + eps_date.values.tolist() + fiscal_date.values.tolist()))
-    plt.legend()
-    plt.xlabel('Date')
-    plt.ylabel('Stock Price')
-    plt.xticks(xticks, xlabels, rotation=25)
-    plt.tick_params(length=2, direction='in')
-    plt.title('Stock Price Chart with EPS Dates')
-    plt.grid(axis='y', linestyle='-', alpha=1)
+    comp_stock.loc[:, 'Date'] = pd.to_datetime(comp_stock['Date'])
+    comp_stock.set_index('Date', inplace=True)
+    # Ensure quarterly_eps_df['reportedDate'] and quarterly_eps_df['fiscalDateEnding'] are in datetime format
+    quarterly_eps_df['reportedDate'] = pd.to_datetime(quarterly_eps_df['reportedDate'])
+    quarterly_eps_df['fiscalDateEnding'] = pd.to_datetime(quarterly_eps_df['fiscalDateEnding'])
+    # Creating markers for EPS report date and fiscal end date
+    eps_markers = quarterly_eps_df.loc[quarterly_eps_df['reportedDate'].between(start, end), 'reportedDate'].values
+    fiscal_markers = quarterly_eps_df.loc[quarterly_eps_df['fiscalDateEnding'].between(start, end), 'fiscalDateEnding'].values
+    # Creating EPS signals
+    offset = 10
+    all_dates = pd.date_range(start, end, freq='D')
+    low_prices = comp_stock['Low'].reindex(all_dates).interpolate(method='linear')
+    high_prices = comp_stock['High'].reindex(all_dates).interpolate(method='linear')
+    eps_signal = high_prices.loc[eps_markers] + offset
+    fiscal_signal = low_prices.loc[fiscal_markers] - offset
+    # Plotting the candlestick chart
+    fig, axlist = mpf.plot(
+        comp_stock, type='candle', mav=7, style='yahoo', 
+        panel_ratios=(2,1), figratio=(2,1), figscale=1, 
+        title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
+        volume=True, show_nontrading=True, returnfig=True,
+    )
+
+    eps_x = [mdates.date2num(date) for date in eps_signal.index]
+    eps_y = [eps_signal[i] for i in eps_signal.index]
+    fiscal_x = [mdates.date2num(date) for date in fiscal_signal.index]
+    fiscal_y = [fiscal_signal[i] for i in fiscal_signal.index]
+
+    axlist[0].scatter(eps_x, eps_y, s=50, marker='v', color='orange', label='EPS Reported Date')
+    axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='blue', label='Fiscal End Date')
+    axlist[0].legend(frameon=False)
     
     buf = io.BytesIO()
-    plt.savefig(buf, format='png')
+    fig.savefig(buf, format='png')
     buf.seek(0)  # Important: move the buffer's start to the beginning after saving
-    
-    # image = Image.open(buf)
-    # buf.close()
     
     return buf
 
@@ -266,9 +267,10 @@ def main():
     image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
     image = Image.open(image_buf) if args.image else None
     response = client.query(message, image)
-    image_buf.close() if args.image else None
     os.makedirs(args.output_dir, exist_ok=True)
     json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
+    image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
+    image_buf.close() if args.image else None
     print(response)
 
 
