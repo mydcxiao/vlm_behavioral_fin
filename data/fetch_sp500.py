@@ -6,7 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 
 
-def tickers_sp500(include_company_data = False):
+def tickers_sp500():
     '''Downloads list of tickers currently listed in the S&P 500 '''
     #TODO check why does si.tickers_sp500() not work?
     # get list of all S&P 500 stocks 
