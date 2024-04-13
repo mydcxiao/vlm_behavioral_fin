@@ -38,7 +38,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, recency=3):
         after = comp_stock.loc[comp_stock['Date'].between(date+pd.Timedelta(days=1), date+pd.Timedelta(days=8)), 'Close'].mean()
         return after >= before
     
-    bias_data, label = [], []
+    bias_time, label = [], []
     for i in range(1, len(quarterly_eps_df) - recency):
         
         if quarterly_eps_df.iloc[i-1]['surprise'] == 'None':
@@ -66,10 +66,10 @@ def detect_recency_bias(ticker, stock_file, eps_dir, recency=3):
         if bias_diff <= 0 or no_surprise_report:
             continue
         
-        bias_data.append(((quarterly_eps_df.iloc[i+recency-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
+        bias_time.append(((quarterly_eps_df.iloc[i+recency-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
         label.append(float(quarterly_eps_df.iloc[i-1]['surprise']) >= 0)
     
-    return bias_data, label
+    return bias_time, label
 
 
 def detect_primacy_bias():
