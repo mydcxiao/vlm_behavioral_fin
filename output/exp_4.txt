@@ -1,0 +1,4 @@
+accuracy: 0.7777777777777778
+bias: 0
+bias percentage: 0.0
+wrong by bias: 0.0

@@ -24,12 +24,12 @@ def tickers_sp500():
     return sp_tickers
 
 # Function to fetch and save S&P 500 stock prices
-def fetch_and_save_prices(tickers, start=None, end=None):
+def fetch_and_save_prices(tickers, start=None, end=None, save_path='stock_history.csv'):
     start = dt.datetime(2000, 1, 1).strftime('%Y-%m-%d') if not start else start # Start date
     end = dt.datetime.now().strftime('%Y-%m-%d') if not end else end # Format today's date
     prices = yf.download(tickers, start=start, end=end)
     # prices = prices['Close']  # We're interested in the closing prices
-    prices.to_csv(f'stock_history.csv')  # Save to a CSV file
+    prices.to_csv(save_path)  # Save to a CSV file
     return prices
 
 # Main script

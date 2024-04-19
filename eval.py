@@ -4,6 +4,7 @@ import time
 import argparse
 import os
 import io
+import re
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -22,21 +23,23 @@ import accelerate
 
 import torch
 
+from detect_anomaly import detect_recency_bias
+from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
+
 
 def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="llama-chat", help='Model name')
     parser.add_argument('--api', action='store_true', default=False, help='Use API')
     parser.add_argument('--token', type=str, default="", help='API token')
+    parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
     parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
     parser.add_argument('--stock_file', type=str, default="data/stock_history.csv", help='history stock data file path')
     parser.add_argument('--eps_dir', type=str, default="data/eps_history/", help='history eps data dir path')
-    parser.add_argument('--ticker', type=str, default="AAPL", help='stock ticker')
-    parser.add_argument('--start_time', type=str, default="2020-12-01", help='start time')
-    parser.add_argument('--end_time', type=str, default="2021-01-01", help='end time')
-    parser.add_argument('--narrative', action='store_true', default=False, help='use narrative input string')
+    parser.add_argument('--ticker', type=str, nargs='*', help='list of stock ticker')
+    parser.add_argument('--narrative', action='store_true', default=False, help='use narrative string of input')
     parser.add_argument('--image', action='store_true', default=False, help='use image input string')
     parser.add_argument('--quant', action='store_true', default=False, help='use quantization')
     
@@ -55,6 +58,7 @@ def load_json(prompt_path, model_path):
 
 def load_stock_data(path):
     prices = pd.read_csv(path, header=[0, 1], index_col=0)
+    
     return prices
 
 
@@ -69,24 +73,58 @@ class client(object):
         self.gen_cfg = gen_cfg
         self.image_input = image_input
     
-    def query(self, message, image=None):
-        # TODO: Add image input for API
+    def query(self, batched_message, batched_image=None):
         if self.openai:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": message}],
-            )
-            return completion.choices[0].message.content
+            if batched_image is not None:
+                raise NotImplementedError("Image input is not implemented for OpenAI API")
+            
+            batched_response = []
+            for message in batched_message:
+                retry = 3
+                while retry > 0:
+                    try:
+                        completion = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=[{"role": "user", "content": message}],
+                        )
+                    except:
+                        retry -= 1
+                        completion = None
+                        time.sleep(10)
+                
+                batched_response.append(completion.choices[0].message.content) if completion else batched_response.append("Missing")
+            
+            return batched_response
+        
         elif not self.pipe:
-            payload = {"inputs": message}
-            response = requests.post(self.url, headers=self.headers, json=payload)
-            return response.json()[0]['generated_text']
-        else:
-            if self.image_input and image is not None:
-                response = self.pipe(image, prompt=message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text']
+            if batched_image is not None:
+                raise NotImplementedError("Vision2Seq task is not implemented for Hugging Face Inference API")
+            
+            batched_response = []
+            for message in batched_message:
+                retry = 3
+                while retry > 0:
+                    try:
+                        payload = {"inputs": message}
+                        response = requests.post(self.url, headers=self.headers, json=payload)
+                    except:
+                        retry -= 1
+                        response = None
+                        time.sleep(10)
+                    
+                batched_response.append(response.json()[0]['generated_text']) if response else batched_response.append("Missing")
+            
+            return batched_response
+        
+        else: 
+            if self.image_input and batched_image is not None:
+                batched_response = []
+                for message, image in zip(batched_message, batched_image):
+                    batched_response.append(self.pipe(image, prompt=message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text'])
             else:
-                response = self.pipe(message, generation_config=self.gen_cfg, clean_up_tokenization_spaces=True)[0]['generated_text']
-            return response
+                batched_response = [response[0]['generated_text'] for response in self.pipe(batched_message, generation_config=self.gen_cfg, clean_up_tokenization_spaces=True)]
+            
+            return batched_response
  
             
 def init_model(model_id, model_dict, api=False, token=None, image=False, quant=False):
@@ -134,19 +172,20 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, quant=F
 def construct_message(model, prompt_dict, instruction):
     prompt_template = prompt_dict[model]['prompt']
     message = prompt_template.format(*instruction)
+    
     return message
 
 
-def construct_assistant_message():
+def construct_assistant_message(response, split):
     pass
 
 
-def construct_instruction(args):
-    question = "EPS surprise prediction based off historical stocks' price and EPS data."
+def construct_instruction(args, ticker, start_time, end_time):
+    question = "Stock trending prediction based off historical stocks' price and EPS data."
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
-    criterion = "According to the historical stock price and EPS data, predict the EPS surprise for the next quarter."
-    stock_s, stock_n = construct_stock_history(args.stock_file, args.ticker, args.start_time, args.end_time)
-    eps_s, eps_n = construct_eps_history(args.eps_dir, args.ticker, args.start_time, args.end_time)
+    criterion = "According to the historical stock price and EPS data, predict the stock trending after the lastest EPS report date with the EPS surprise reported."
+    stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
+    eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     if args.narrative:
         instruction = [question, background, criterion, stock_n, eps_n]
     else:
@@ -254,24 +293,103 @@ def construct_images(file, dir, ticker, start, end):
     return buf
 
 
+def parse_answer(response, split, pattern):
+    answer = response.split(split)[-1]
+    parts = pattern.findall(answer)
+    
+    try:
+        number = float(parts[-1])
+        return 1 if number >= 0.5 else 0
+    except:
+        return None
+ 
+
 def main():
     args = args_parser()
+    
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
     client = init_model(args.model, model_dict, args.api, args.token, args.image, args.quant)
-    stock_df = load_stock_data(args.stock_file)
+    
+    if len(args.ticker) == 0:
+        tickers = tickers_sp500()
+        tickers = tickers[:500]
+    else:
+        tickers = args.ticker
+    eps_files = os.listdir(args.eps_dir)
+    tickers = [ticker for ticker in tickers if any(ticker in f for f in eps_files)]
+    
+    os.makedirs(os.path.dirname(args.stock_file), exist_ok=True)
+    if os.path.exists(args.stock_file):
+        stock_df = load_stock_data(args.stock_file)
+    else:
+        fetch_and_save_prices(tickers, save_path=args.stock_file)
+        stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
-    instruction = construct_instruction(args)
-    instruction.pop(-2) if args.image else None
-    message = construct_message(args.model, prompt_dict, instruction)
-    image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
-    image = Image.open(image_buf) if args.image else None
-    response = client.query(message, image)
+    
+    recency_bias_data = []
+    for ticker in tickers:
+        time_period, last, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=5)
+        for i in range(len(time_period)):
+            recency_bias_data.append((ticker, time_period[i][0], time_period[i][1], last[i], gt[i]))
+    
     os.makedirs(args.output_dir, exist_ok=True)
-    json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
-    image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
-    image_buf.close() if args.image else None
-    print(response)
-
-
+    os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
+    output_file = f"exp_{len(os.listdir(args.output_dir))}"
+    
+    split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
+    pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
+    all_eval = []
+    correct, wrong, bias, total = 0, 0, 0, 0 
+    
+    for i in range(0, len(recency_bias_data), args.batch_size):
+        batch = recency_bias_data[i:i+args.batch_size]
+        batched_message, batched_imgbuf, batched_last, batched_gt = [], [], [], []
+        for ticker, start_time, end_time, last, gt in batch:
+            instruction = construct_instruction(args, ticker, start_time, end_time)
+            instruction[-2] = 'refer to input image' if args.image else None
+            message = construct_message(args.model, prompt_dict, instruction)
+            image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time) if args.image else None
+            batched_message.append(message)
+            batched_imgbuf.append(image_buf)
+            batched_last.append(last)
+            batched_gt.append(gt)
+        
+        batched_image = [Image.open(buf) for buf in batched_imgbuf] if args.image else None
+        batched_response = client.query(batched_message, batched_image)
+        batched_answer = [parse_answer(response, split, pattern) for response in batched_response]
+        
+        for answer, last, gt in zip(batched_answer, batched_last, batched_gt):
+            if answer == gt:
+                correct += 1
+            else:
+                wrong += 1
+                if last == answer:
+                    bias += 1
+            total += 1
+        
+        for (ticker, start_time, end_time, last, gt), response in zip(batch, batched_response):
+            all_eval.append({
+                "ticker": ticker,
+                "start_time": start_time,
+                "end_time": end_time,
+                "last": last,
+                "gt": gt,
+                "response": response
+            })
+            
+        if args.image:
+            for buf, image in zip(batched_imgbuf, batched_image):
+                image.save(os.path.join(args.output_dir, 'images', f"{ticker}_{start_time}_{end_time}.png"))
+                buf.close()
+    
+    json.dump(all_eval, open(os.path.join(args.output_dir, output_file+'.json'), "w"))
+    
+    stats = f"accuracy: {correct/total if total else 0}\nbias: {bias}\nbias percentage: {bias/total if total else 0}\nwrong by bias: {bias/wrong if wrong else 0}"
+    with open(os.path.join(args.output_dir, output_file+'.txt'), "w") as f:
+        f.write(stats)
+    
+    print(stats)
+    
+    
 if __name__ == "__main__":
     main()
