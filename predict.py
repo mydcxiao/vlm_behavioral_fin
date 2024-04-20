@@ -142,9 +142,9 @@ def construct_assistant_message():
 
 
 def construct_instruction(args):
-    question = "EPS surprise prediction based off historical stocks' price and EPS data."
+    question = "Stock trending prediction based off historical stocks' price and EPS data."
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
-    criterion = "According to the historical stock price and EPS data, predict the EPS surprise for the next quarter."
+    criterion = "According to the historical stock price and EPS data, predict the stock trending after the lastest EPS report date with the EPS surprise reported."
     stock_s, stock_n = construct_stock_history(args.stock_file, args.ticker, args.start_time, args.end_time)
     eps_s, eps_n = construct_eps_history(args.eps_dir, args.ticker, args.start_time, args.end_time)
     if args.narrative:
@@ -261,7 +261,7 @@ def main():
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     instruction = construct_instruction(args)
-    instruction.pop(-2) if args.image else None
+    instruction[-2] = 'refer to input image' if args.image else None
     message = construct_message(args.model, prompt_dict, instruction)
     image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
     image = Image.open(image_buf) if args.image else None
