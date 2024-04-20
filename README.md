@@ -10,7 +10,7 @@
 
 ## Evaluation
 ```shell
-python eval.py --model llama --image --quant --ticker AAPL AMZN
+python eval.py --model llava --image --quant --ticker AAPL AMZN
 ```
 
 ## Prediction
