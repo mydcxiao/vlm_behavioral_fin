@@ -11,6 +11,31 @@ from tqdm import tqdm
 
 
 def detect_recency_bias(ticker, stock_file, eps_dir, window=4):
+    """
+    Analyze stock price movements around earnings report dates to detect potential recency bias in investor reactions. 
+    The function examines a specified window of consecutive quarters, assessing if there is a consistent pattern in 
+    how stock prices react to earnings surprises, either positive or negative.
+
+    Parameters:
+    - ticker (str): The stock ticker symbol for which the analysis is performed.
+    - stock_file (pd.DataFrame): DataFrame containing historical stock prices with at least columns ['Date', 'Close'].
+    - eps_dir (str): The directory path where JSON files containing earnings per share (EPS) data are stored.
+    - window (int, optional): The number of consecutive quarters to consider for detecting the bias. Defaults to 4.
+
+    Returns:
+    - tuple of three lists:
+        - bias_time (list of tuples): Each tuple contains the start and end date (as strings) of the period where bias was detected.
+        - last (list of int): List of binary values where each corresponds to the direction of stock movement at the last observed earnings date within the window (1 if price went up or remained the same, 0 if down).
+        - gt (list of int): List of binary values indicating the direction of stock movement at the most recent earnings date (1 if price went up or remained the same, 0 if down).
+
+    Example:
+    >>> detect_recency_bias('AAPL', stock_prices_df, '/path/to/eps/data', 4)
+    ([('2020-01-01', '2020-04-01')], [1], [0])
+
+    Notes:
+    - This function assumes the EPS data is stored in JSON format and contains at least 'quarterlyEarnings' with keys 'reportedDate' and 'surprise'.
+    - The stock data should be preloaded into the DataFrame with dates sorted in ascending order for accurate analysis.
+    """
     dataframe = stock_file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock.columns.name = None

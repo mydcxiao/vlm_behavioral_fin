@@ -1,3 +1,9 @@
+"""
+This script is designed to perform a prediction of stock price movements in relation to earnings surprises
+over a given period. It integrates functionalities such as data fetching, model initialization and API interaction 
+to facilitate a prediction of stock trends over a given tick and period.
+"""
+
 import requests
 import json
 import time
