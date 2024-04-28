@@ -10,7 +10,7 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def detect_recency_bias(ticker, stock_file, eps_dir, window=4):
+def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
     """
     Analyze stock price movements around earnings report dates to detect potential recency bias in investor reactions. 
     The function examines a specified window of consecutive quarters, assessing if there is a consistent pattern in 
@@ -57,10 +57,13 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=4):
     
     comp_stock.loc[:, 'Date'] = pd.to_datetime(comp_stock['Date'])
     quarterly_eps_df.loc[:, 'reportedDate'] = pd.to_datetime(quarterly_eps_df['reportedDate'])
+    # EPS report within stock time range
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['reportedDate'].between(comp_stock['Date'].min(), comp_stock['Date'].max())]
     
     def _up_or_down(date):
         before = comp_stock.loc[comp_stock['Date'].between(date-pd.Timedelta(days=7), date), 'Close'].mean()
         after = comp_stock.loc[comp_stock['Date'].between(date+pd.Timedelta(days=1), date+pd.Timedelta(days=8)), 'Close'].mean()
+        
         return int(after >= before)
     
     bias_time, last, gt = [], [], []

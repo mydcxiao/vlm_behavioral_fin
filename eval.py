@@ -445,25 +445,39 @@ def construct_images(file, dir, ticker, start, end):
     # Creating markers for EPS report date and fiscal end date
     eps_markers = quarterly_eps_df.loc[quarterly_eps_df['reportedDate'].between(start, end), 'reportedDate'].values
     fiscal_markers = quarterly_eps_df.loc[quarterly_eps_df['fiscalDateEnding'].between(start, end), 'fiscalDateEnding'].values
+    # Calculate minimum and maximum prices for y-axis scaling
+    price_min = comp_stock[['Low']].min().min()  # min of 'Low' prices
+    price_max = comp_stock[['High']].max().max()  # max of 'High' prices
+    price_range = price_max - price_min
+    price_buffer = price_range * 0.1  # 10% price buffer on each side
+    # Calculate adaptive offsets for markers
+    offset = price_range * 0.25  # 25% of the price range
     # Creating EPS signals
-    offset = 10
     all_dates = pd.date_range(start, end, freq='D')
     low_prices = comp_stock['Low'].reindex(all_dates).interpolate(method='linear')
     high_prices = comp_stock['High'].reindex(all_dates).interpolate(method='linear')
     eps_signal = high_prices.loc[eps_markers] + offset
     fiscal_signal = low_prices.loc[fiscal_markers] - offset
+    # Setting figure size dynamically based on the date range
+    date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
+    fig_width = max(10, date_range / 30) # 30 days per inch
+    fig_height = 6  # Keeping height constant
     # Plotting the candlestick chart
     fig, axlist = mpf.plot(
         comp_stock, type='candle', mav=7, style='yahoo', 
-        panel_ratios=(2,1), figratio=(2,1), figscale=1, 
+        panel_ratios=(2,1), 
+        # figratio=(2,1), 
+        figratio=(fig_width, fig_height),
+        figscale=1, 
         title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
         volume=True, show_nontrading=True, returnfig=True,
+        ylim=(price_min - price_buffer, price_max + price_buffer),
     )
 
     eps_x = [mdates.date2num(date) for date in eps_signal.index]
-    eps_y = [eps_signal[i] for i in eps_signal.index]
+    eps_y = [eps_signal[i] if eps_signal[i] < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5 for i in eps_signal.index]
     fiscal_x = [mdates.date2num(date) for date in fiscal_signal.index]
-    fiscal_y = [fiscal_signal[i] for i in fiscal_signal.index]
+    fiscal_y = [fiscal_signal[i] if fiscal_signal[i] > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5 for i in fiscal_signal.index]
 
     axlist[0].scatter(eps_x, eps_y, s=50, marker='v', color='orange', label='EPS Reported Date')
     axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='blue', label='Fiscal End Date')
@@ -503,9 +517,11 @@ def parse_answer(response, split, pattern):
 
 def main():
     args = args_parser()
+    
     # load config JSON files and init models
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
     client = init_model(args.model, model_dict, args.api, args.token, args.image, args.quant)
+    
     # get all possible tickers if no ticker is provided
     if len(args.ticker) == 0:
         tickers = tickers_sp500()
@@ -514,6 +530,7 @@ def main():
         tickers = args.ticker
     eps_files = os.listdir(args.eps_dir)
     tickers = [ticker for ticker in tickers if any(ticker in f for f in eps_files)]
+    
     # load stock data from file or fetch and save a new one if not exist
     os.makedirs(os.path.dirname(args.stock_file), exist_ok=True)
     if os.path.exists(args.stock_file):
@@ -522,12 +539,14 @@ def main():
         fetch_and_save_prices(tickers, save_path=args.stock_file)
         stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
+    
     # evaluate recency bias
     recency_bias_data = []
     for ticker in tickers:
         time_period, last, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=5)
         for i in range(len(time_period)):
             recency_bias_data.append((ticker, time_period[i][0], time_period[i][1], last[i], gt[i]))
+
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
@@ -550,7 +569,7 @@ def main():
             batched_imgbuf.append(image_buf)
             batched_last.append(last)
             batched_gt.append(gt)
-        
+       
         batched_image = [Image.open(buf) for buf in batched_imgbuf] if args.image else None
         batched_response = client.query(batched_message, batched_image)
         batched_answer = [parse_answer(response, split, pattern) for response in batched_response]
@@ -575,9 +594,10 @@ def main():
             })
             
         if args.image:
-            for buf, image in zip(batched_imgbuf, batched_image):
+            for buf, image, (ticker, start_time, end_time, _, _) in zip(batched_imgbuf, batched_image, batch):
                 image.save(os.path.join(args.output_dir, 'images', f"{ticker}_{start_time}_{end_time}.png"))
                 buf.close()
+                
     # save evaluation results
     json.dump(all_eval, open(os.path.join(args.output_dir, output_file+'.json'), "w"))
     

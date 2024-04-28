@@ -3,3 +3,4 @@ data/*.csv
 **/__pycache__/
 **/__pycache__
 output/**.json
+output/exp*
