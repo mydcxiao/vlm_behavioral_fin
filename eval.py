@@ -53,6 +53,7 @@ def args_parser():
         --narrative (bool): If set, uses a narrative form of historical data, default is False (structured form of historical data).
         --image (bool): If set, uses image inputs along with text, default is False.
         --quant (bool): If set, enables quantization for model processing, default is False.
+        --bias_type (str): Specifies the type of bias to evaluate, default is 'recency'.
 
     Returns:
         argparse.Namespace: Returns an object containing the parsed command-line arguments. Each argument is accessible
@@ -72,6 +73,7 @@ def args_parser():
     parser.add_argument('--narrative', action='store_true', default=False, help='use narrative string of input')
     parser.add_argument('--image', action='store_true', default=False, help='use image input string')
     parser.add_argument('--quant', action='store_true', default=False, help='use quantization')
+    parser.add_argument('--bias_type', type=str, default="recency", help='bias type')
     
     return parser.parse_args()
 
@@ -494,15 +496,15 @@ def parse_answer(response, split, pattern):
     """
     Parses a textual response to extract and evaluate numerical information based on a given pattern and split criteria.
     This function is designed to split the response at a specified delimiter, apply a regular expression pattern to find
-    numeric values, and then determine a binary outcome based on the last numeric value extracted.
+    numeric values, and then determine a binary outcome based on the bias numeric value extracted.
 
     Parameters:
     - response (str): The textual response from which to extract the number.
-    - split (str): The delimiter used to split the response string. The function will use the last segment after this split.
+    - split (str): The delimiter used to split the response string. The function will use the bias segment after this split.
     - pattern (re.Pattern): A compiled regular expression pattern used to find all numeric strings in the selected segment.
 
     Returns:
-    - int: Returns 1 if the last numeric value found is greater than or equal to 0.5, otherwise returns 0.
+    - int: Returns 1 if the bias numeric value found is greater than or equal to 0.5, otherwise returns 0.
     - None: Returns None if no numeric value is found or if the extraction and conversion to float fail.
     """
     answer = response.split(split)[-1]
@@ -540,12 +542,13 @@ def main():
         stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     
-    # evaluate recency bias
-    recency_bias_data = []
+    # evaluate bias
+    bias_data = []
     for ticker in tickers:
-        time_period, last, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=5)
+        if args.bias_type == 'recency':
+            time_period, bias, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=5)
         for i in range(len(time_period)):
-            recency_bias_data.append((ticker, time_period[i][0], time_period[i][1], last[i], gt[i]))
+            bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
 
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
@@ -557,38 +560,38 @@ def main():
     all_eval = []
     correct, wrong, bias, total = 0, 0, 0, 0 
     
-    for i in range(0, len(recency_bias_data), args.batch_size):
-        batch = recency_bias_data[i:i+args.batch_size]
-        batched_message, batched_imgbuf, batched_last, batched_gt = [], [], [], []
-        for ticker, start_time, end_time, last, gt in batch:
+    for i in range(0, len(bias_data), args.batch_size):
+        batch = bias_data[i:i+args.batch_size]
+        batched_message, batched_imgbuf, batched_bias, batched_gt = [], [], [], []
+        for ticker, start_time, end_time, bias, gt in batch:
             instruction = construct_instruction(args, ticker, start_time, end_time)
             instruction[-2] = 'refer to input image' if args.image else None
             message = construct_message(args.model, prompt_dict, instruction)
             image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time) if args.image else None
             batched_message.append(message)
             batched_imgbuf.append(image_buf)
-            batched_last.append(last)
+            batched_bias.append(bias)
             batched_gt.append(gt)
        
         batched_image = [Image.open(buf) for buf in batched_imgbuf] if args.image else None
         batched_response = client.query(batched_message, batched_image)
         batched_answer = [parse_answer(response, split, pattern) for response in batched_response]
         
-        for answer, last, gt in zip(batched_answer, batched_last, batched_gt):
+        for answer, bias, gt in zip(batched_answer, batched_bias, batched_gt):
             if answer == gt:
                 correct += 1
             else:
                 wrong += 1
-                if last == answer:
+                if bias == answer:
                     bias += 1
             total += 1
         
-        for (ticker, start_time, end_time, last, gt), response in zip(batch, batched_response):
+        for (ticker, start_time, end_time, bias, gt), response in zip(batch, batched_response):
             all_eval.append({
                 "ticker": ticker,
                 "start_time": start_time,
                 "end_time": end_time,
-                "last": last,
+                "bias": bias,
                 "gt": gt,
                 "response": response
             })
