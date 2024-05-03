@@ -321,7 +321,7 @@ def construct_instruction(args, ticker, start_time, end_time):
     """
     question = "Stock trending prediction based off historical stocks' price and EPS data."
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
-    criterion = "According to the historical stock price and EPS data, predict the stock trending after the lastest EPS report date with the EPS surprise reported."
+    criterion = "According to the historical stock price and EPS data, predict the stock trending after the latest EPS report date with the EPS surprise reported."
     stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     if args.narrative:
