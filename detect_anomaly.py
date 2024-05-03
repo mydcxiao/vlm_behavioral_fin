@@ -43,7 +43,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
     files = os.listdir(eps_dir)
     file = None
     for f in files:
-        if ticker in f:
+        if ticker == f.split('.')[0].split('-')[1]:
             file = f
             break
     if not file:
@@ -51,6 +51,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
     with open(os.path.join(eps_dir,file), "r") as f:
         eps_dict = json.load(f)
     f.close()
+    assert 'quarterlyEarnings' in eps_dict, f"'quarterlyEarnings' not found for {ticker} in {file}"
     quarterly_eps = eps_dict['quarterlyEarnings']
     quarterly_eps_df = pd.DataFrame(quarterly_eps)
     quarterly_eps_df = quarterly_eps_df.sort_values(by='reportedDate', ascending=False)

@@ -54,6 +54,7 @@ def args_parser():
         --image (bool): If set, uses image inputs along with text, default is False.
         --quant (bool): If set, enables quantization for model processing, default is False.
         --bias_type (str): Specifies the type of bias to evaluate, default is 'recency'.
+        --window_size (int): Sets the window size for bias detection, default is 5.
 
     Returns:
         argparse.Namespace: Returns an object containing the parsed command-line arguments. Each argument is accessible
@@ -74,6 +75,8 @@ def args_parser():
     parser.add_argument('--image', action='store_true', default=False, help='use image input string')
     parser.add_argument('--quant', action='store_true', default=False, help='use quantization')
     parser.add_argument('--bias_type', type=str, default="recency", help='bias type')
+    parser.add_argument('--window_size', type=int, default=5, help='window size for bias detection')
+    parser.add_argument('--save_image', action='store_true', default=False, help='save image or not')
     
     return parser.parse_args()
 
@@ -383,7 +386,7 @@ def construct_eps_history(dir, ticker, start, end):
     files = os.listdir(dir)
     file = None
     for f in files:
-        if ticker in f:
+        if ticker == f.split('.')[0].split('-')[1]:
             file = f
             break
     if not file:
@@ -403,7 +406,7 @@ def construct_eps_history(dir, ticker, start, end):
     return structured_str, narrative
 
 
-def construct_images(file, dir, ticker, start, end):
+def construct_images(file, dir, ticker, start, end, window_size):
     """
     Generates a visual representation (candlestick chart) of stock price movements alongside important EPS (Earnings
     Per Share) report dates within a specified period. This function integrates stock data and EPS data to highlight
@@ -427,7 +430,7 @@ def construct_images(file, dir, ticker, start, end):
     files = os.listdir(dir)
     file = None
     for f in files:
-        if ticker in f:
+        if ticker == f.split('.')[0].split('-')[1]:
             file = f
             break
     if not file:
@@ -440,6 +443,7 @@ def construct_images(file, dir, ticker, start, end):
     quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
 
     comp_stock.loc[:, 'Date'] = pd.to_datetime(comp_stock['Date'])
+    comp_stock = comp_stock.infer_objects() # suppress warning
     comp_stock.set_index('Date', inplace=True)
     # Ensure quarterly_eps_df['reportedDate'] and quarterly_eps_df['fiscalDateEnding'] are in datetime format
     quarterly_eps_df['reportedDate'] = pd.to_datetime(quarterly_eps_df['reportedDate'])
@@ -462,25 +466,30 @@ def construct_images(file, dir, ticker, start, end):
     fiscal_signal = low_prices.loc[fiscal_markers] - offset
     # Setting figure size dynamically based on the date range
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
-    fig_width = max(10, date_range / 30) # 30 days per inch
+    fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
     fig_height = 6  # Keeping height constant
+    # Define figure type and style
+    fig_type = 'candle' if window_size <= 10 else 'line'
+    mav = 7 if window_size <= 10 else ()
     # Plotting the candlestick chart
     fig, axlist = mpf.plot(
-        comp_stock, type='candle', mav=7, style='yahoo', 
+        comp_stock, type=fig_type, mav=mav, style='yahoo', 
         panel_ratios=(2,1), 
         # figratio=(2,1), 
         figratio=(fig_width, fig_height),
-        figscale=1, 
+        figscale=1 * min(1, date_range / 120),
         title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
         volume=True, show_nontrading=True, returnfig=True,
         ylim=(price_min - price_buffer, price_max + price_buffer),
     )
 
     eps_x = [mdates.date2num(date) for date in eps_signal.index]
-    eps_y = [eps_signal[i] if eps_signal[i] < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5 for i in eps_signal.index]
+    # eps_y = [eps_signal[i] if eps_signal[i] < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5 for i in eps_signal.index]
+    eps_y = eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
     fiscal_x = [mdates.date2num(date) for date in fiscal_signal.index]
-    fiscal_y = [fiscal_signal[i] if fiscal_signal[i] > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5 for i in fiscal_signal.index]
-
+    # fiscal_y = [fiscal_signal[i] if fiscal_signal[i] > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5 for i in fiscal_signal.index]
+    fiscal_y = fiscal_signal.apply(lambda x: x if x > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5).tolist()
+    
     axlist[0].scatter(eps_x, eps_y, s=50, marker='v', color='orange', label='EPS Reported Date')
     axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='blue', label='Fiscal End Date')
     axlist[0].legend(frameon=False)
@@ -531,7 +540,7 @@ def main():
     else:
         tickers = args.ticker
     eps_files = os.listdir(args.eps_dir)
-    tickers = [ticker for ticker in tickers if any(ticker in f for f in eps_files)]
+    tickers = [ticker for ticker in tickers if any(ticker == f.split('.')[0].split('-')[1] for f in eps_files)]
     
     # load stock data from file or fetch and save a new one if not exist
     os.makedirs(os.path.dirname(args.stock_file), exist_ok=True)
@@ -546,7 +555,7 @@ def main():
     bias_data = []
     for ticker in tickers:
         if args.bias_type == 'recency':
-            time_period, bias, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=5)
+            time_period, bias, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=args.window_size)
         for i in range(len(time_period)):
             bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
 
@@ -560,14 +569,14 @@ def main():
     all_eval = []
     correct, wrong, bias, total = 0, 0, 0, 0 
     
-    for i in range(0, len(bias_data), args.batch_size):
+    for i in tqdm(range(0, len(bias_data), args.batch_size)):
         batch = bias_data[i:i+args.batch_size]
         batched_message, batched_imgbuf, batched_bias, batched_gt = [], [], [], []
         for ticker, start_time, end_time, bias, gt in batch:
             instruction = construct_instruction(args, ticker, start_time, end_time)
             instruction[-2] = 'refer to input image' if args.image else None
             message = construct_message(args.model, prompt_dict, instruction)
-            image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time) if args.image else None
+            image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time, args.window_size) if args.image else None
             batched_message.append(message)
             batched_imgbuf.append(image_buf)
             batched_bias.append(bias)
@@ -598,7 +607,8 @@ def main():
             
         if args.image:
             for buf, image, (ticker, start_time, end_time, _, _) in zip(batched_imgbuf, batched_image, batch):
-                image.save(os.path.join(args.output_dir, 'images', f"{ticker}_{start_time}_{end_time}.png"))
+                if args.save_image:
+                    image.save(os.path.join(args.output_dir, 'images', f"{ticker}_{start_time}_{end_time}.png"))
                 buf.close()
                 
     # save evaluation results
