@@ -497,6 +497,7 @@ def construct_images(file, dir, ticker, start, end, window_size):
     buf = io.BytesIO()
     fig.savefig(buf, format='png')
     buf.seek(0)  # Important: move the buffer's start to the beginning after saving
+    plt.close()
     
     return buf
 
@@ -562,7 +563,7 @@ def main():
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
-    output_file = f"exp_{len(os.listdir(args.output_dir))}"
+    output_file = f"exp_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}"
     # evaluate model
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
     pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
