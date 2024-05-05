@@ -1,41 +1,38 @@
-import requests
 import json
 import time
 import argparse
 import os
-import io
 import re
+
 
 def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--path', type=str, help='path to generated JSON file')
-    parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
-    parser.add_argument('--model', type=str, default="llama-chat", help='Model name')
     
     return parser.parse_args()
 
 
-def parse_answer(response, split, pattern):
-    answer = response.split(split)[-1]
-    parts = pattern.findall(answer)
+def parse_answer(response, pattern):
+    parts = pattern.findall(response)
     
     try:
         number = float(parts[-1])
+        if number < 0 or number > 1:
+            return None
         return 1 if number >= 0.5 else 0
     except:
         return None
     
+
 if __name__ == '__main__':
     args = args_parser()
     
     eval_list = json.load(open(args.path, 'r'))
-    prompt_dict = json.load(open(args.prompt_cfg, 'r'))
-    split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
     pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
     
     correct, wrong, wrong_by_bias, no_answer, total = 0, 0, 0, 0, 0
     for eval in eval_list:
-        answer = parse_answer(eval['response'], split, pattern)
+        answer = parse_answer(eval['response'], pattern)
         bias = eval['bias']
         gt = eval['gt']
         if answer == gt:
@@ -44,7 +41,7 @@ if __name__ == '__main__':
             wrong += 1
             if bias == answer:
                 wrong_by_bias += 1
-            if bias is None:
+            if answer is None:
                 no_answer += 1
         total += 1
     

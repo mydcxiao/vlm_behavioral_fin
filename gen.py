@@ -11,6 +11,7 @@ import argparse
 import os
 import io
 import re
+import warnings
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -299,8 +300,11 @@ def construct_message(model, prompt_dict, instruction):
 def construct_assistant_message(response, split):
     """
     Constructs an assistant message for multi-turn char models.
+    Parameters:
+        - split (str): The delimiter used to split the model returned string. The segment after this split will be the response string.
     """
-    pass
+    content = response.split(split)[-1].strip()
+    return content
 
 
 def construct_instruction(args, ticker, start_time, end_time):
@@ -406,7 +410,7 @@ def construct_eps_history(dir, ticker, start, end):
     return structured_str, narrative
 
 
-def construct_images(file, dir, ticker, start, end, window_size):
+def construct_images(file, dir, ticker, start, end):
     """
     Generates a visual representation (candlestick chart) of stock price movements alongside important EPS (Earnings
     Per Share) report dates within a specified period. This function integrates stock data and EPS data to highlight
@@ -468,20 +472,30 @@ def construct_images(file, dir, ticker, start, end, window_size):
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
     fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
     fig_height = 6  # Keeping height constant
-    # Define figure type and style
-    fig_type = 'candle' if window_size <= 10 else 'line'
-    mav = 7 if window_size <= 10 else ()
     # Plotting the candlestick chart
-    fig, axlist = mpf.plot(
-        comp_stock, type=fig_type, mav=mav, style='yahoo', 
-        panel_ratios=(2,1), 
-        # figratio=(2,1), 
-        figratio=(fig_width, fig_height),
-        figscale=1 * min(1, date_range / 120),
-        title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
-        volume=True, show_nontrading=True, returnfig=True,
-        ylim=(price_min - price_buffer, price_max + price_buffer),
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        try:
+            fig, axlist = mpf.plot(
+                comp_stock, type='candle', mav=(7), style='yahoo', 
+                panel_ratios=(2,1), 
+                # figratio=(2,1), 
+                figratio=(fig_width, fig_height),
+                figscale=1 * min(1, date_range / 120),
+                title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
+                volume=True, show_nontrading=True, returnfig=True,
+                ylim=(price_min - price_buffer, price_max + price_buffer),
+            )
+        except:
+            fig, axlist = mpf.plot(
+                comp_stock, type='line', mav=(), style='yahoo', 
+                panel_ratios=(2,1), 
+                figratio=(fig_width, fig_height),
+                figscale=1 * min(1, date_range / 120),
+                title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
+                volume=True, show_nontrading=True, returnfig=True,
+                ylim=(price_min - price_buffer, price_max + price_buffer),
+            )       
 
     eps_x = [mdates.date2num(date) for date in eps_signal.index]
     # eps_y = [eps_signal[i] if eps_signal[i] < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5 for i in eps_signal.index]
@@ -502,7 +516,7 @@ def construct_images(file, dir, ticker, start, end, window_size):
     return buf
 
 
-def parse_answer(response, split, pattern):
+def parse_answer(response, pattern):
     """
     Parses a textual response to extract and evaluate numerical information based on a given pattern and split criteria.
     This function is designed to split the response at a specified delimiter, apply a regular expression pattern to find
@@ -510,18 +524,18 @@ def parse_answer(response, split, pattern):
 
     Parameters:
     - response (str): The textual response from which to extract the number.
-    - split (str): The delimiter used to split the response string. The function will use the bias segment after this split.
     - pattern (re.Pattern): A compiled regular expression pattern used to find all numeric strings in the selected segment.
 
     Returns:
     - int: Returns 1 if the bias numeric value found is greater than or equal to 0.5, otherwise returns 0.
     - None: Returns None if no numeric value is found or if the extraction and conversion to float fail.
     """
-    answer = response.split(split)[-1]
-    parts = pattern.findall(answer)
+    parts = pattern.findall(response)
     
     try:
         number = float(parts[-1])
+        if number < 0 or number > 1:
+            return None
         return 1 if number >= 0.5 else 0
     except:
         return None
@@ -577,7 +591,7 @@ def main():
             instruction = construct_instruction(args, ticker, start_time, end_time)
             instruction[-2] = 'refer to input image' if args.image else None
             message = construct_message(args.model, prompt_dict, instruction)
-            image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time, args.window_size) if args.image else None
+            image_buf = construct_images(args.stock_file, args.eps_dir, ticker, start_time, end_time) if args.image else None
             batched_message.append(message)
             batched_imgbuf.append(image_buf)
             batched_bias.append(bias)
@@ -585,7 +599,8 @@ def main():
        
         batched_image = [Image.open(buf) for buf in batched_imgbuf] if args.image else None
         batched_response = client.query(batched_message, batched_image)
-        batched_answer = [parse_answer(response, split, pattern) for response in batched_response]
+        batched_response = [construct_assistant_message(response, split) for response in batched_response]
+        batched_answer = [parse_answer(response, pattern) for response in batched_response]
         
         for answer, bias, gt in zip(batched_answer, batched_bias, batched_gt):
             if answer == gt:
@@ -594,7 +609,7 @@ def main():
                 wrong += 1
                 if bias == answer:
                     wrong_by_bias += 1
-                if bias is None:
+                if answer is None:
                     no_answer += 1
             total += 1
         

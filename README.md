@@ -4,13 +4,19 @@
 - ✅ implement LLM inference
 - ✅ implement multimodal inference
 - ✅ build batched inference for massive data
-- :x: test prompt template
+- ✅ conduct pilot exp
+- ✅ test prompt template
 - :x: implement other bias detection
-- :x: conduct experiments
+- :x: conduct full experiments
+
+## Generation
+```shell
+python gen.py --model llava --image --quant --ticker AAPL AMZN
+```
 
 ## Evaluation
 ```shell
-python eval.py --model llava --image --quant --ticker AAPL AMZN
+python eval.py --path exp.json
 ```
 
 ## Prediction
