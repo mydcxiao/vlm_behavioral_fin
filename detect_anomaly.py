@@ -25,7 +25,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
     Returns:
     - tuple of three lists:
         - bias_time (list of tuples): Each tuple contains the start and end date (as strings) of the period where bias was detected.
-        - last (list of int): List of binary values where each corresponds to the direction of stock movement at the last observed earnings date within the window (1 if price went up or remained the same, 0 if down).
+        - bias (list of int): List of binary values where each corresponds to the direction of stock movement at the bias observed earnings date within the window (1 if price went up or remained the same, 0 if down).
         - gt (list of int): List of binary values indicating the direction of stock movement at the most recent earnings date (1 if price went up or remained the same, 0 if down).
 
     Example:
@@ -67,7 +67,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         
         return int(after >= before)
     
-    bias_time, last, gt = [], [], []
+    bias_time, bias, gt = [], [], []
     for i in range(len(quarterly_eps_df) - window + 1):
         
         if quarterly_eps_df.iloc[i]['surprise'] == 'None':
@@ -93,10 +93,10 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
             continue
         
         bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
-        last.append(last_up_or_down)
+        bias.append(last_up_or_down)
         gt.append(_up_or_down(quarterly_eps_df.iloc[i]['reportedDate']))
     
-    return bias_time, last, gt
+    return bias_time, bias, gt
 
 
 def detect_primacy_bias():
@@ -108,10 +108,10 @@ def detect_authoritative_bias():
 
 
 # if __name__ == '__main__':
-#     bias_data, last, gt= detect_recency_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/")
+#     bias_data, bias, gt= detect_recency_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/")
 #     print(len(bias_data))
 #     print(bias_data)
-#     print(len(last))
-#     print(last)
+#     print(len(bias))
+#     print(bias)
 #     print(len(gt))
 #     print(gt)
