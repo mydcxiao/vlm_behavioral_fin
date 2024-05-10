@@ -1,5 +1,5 @@
 export MODEL="llava"
-export WINDOW_SIZE=20
+export WINDOW_SIZE=16
 export TICKER=""
 
 python gen.py \

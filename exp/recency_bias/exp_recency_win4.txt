@@ -1,0 +1,6 @@
+accuracy: 0.5452533202164289
+wrong by bias: 800
+bias percentage: 0.19675356615838663
+wrong by bias percentage: 0.43266630611141155
+no answer: 44
+no answer percentage: 0.010821446138711265
