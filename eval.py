@@ -45,7 +45,7 @@ if __name__ == '__main__':
                 no_answer += 1
         total += 1
     
-    stats = f"accuracy: {correct/total if total else 0}\nwrong by bias: {wrong_by_bias}\nbias percentage: {wrong_by_bias/total if total else 0}\nwrong by bias percentage: {wrong_by_bias/wrong if wrong else 0}\nno answer: {no_answer}\nno answer percentage: {no_answer/total if total else 0}"
+    stats = f"total: {total}\ncorrect: {correct}\naccuracy: {correct/total if total else 0}\nwrong: {wrong}\nwrong by bias: {wrong_by_bias}\nbias percentage: {wrong_by_bias/total if total else 0}\nwrong by bias percentage: {wrong_by_bias/wrong if wrong else 0}\nno answer: {no_answer}\nno answer percentage: {no_answer/total if total else 0}"
     
     with open(args.path.replace('.json', '.txt'), "w") as f:
         f.write(stats)

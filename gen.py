@@ -632,7 +632,7 @@ def main():
     # save evaluation results
     json.dump(all_eval, open(os.path.join(args.output_dir, output_file+'.json'), "w"))
     
-    stats = f"accuracy: {correct/total if total else 0}\nwrong by bias: {wrong_by_bias}\nbias percentage: {wrong_by_bias/total if total else 0}\nwrong by bias percentage: {wrong_by_bias/wrong if wrong else 0}\nno answer: {no_answer}\nno answer percentage: {no_answer/total if total else 0}"
+    stats = f"total: {total}\ncorrect: {correct}\naccuracy: {correct/total if total else 0}\nwrong: {wrong}\nwrong by bias: {wrong_by_bias}\nbias percentage: {wrong_by_bias/total if total else 0}\nwrong by bias percentage: {wrong_by_bias/wrong if wrong else 0}\nno answer: {no_answer}\nno answer percentage: {no_answer/total if total else 0}"
     with open(os.path.join(args.output_dir, output_file+'.txt'), "w") as f:
         f.write(stats)
     
