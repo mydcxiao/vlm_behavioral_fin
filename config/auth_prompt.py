@@ -1,3 +1,4 @@
+#Note：Variable History_of_Stock_Price and History_of_EPS should be replaced with the real value.
 import json
 import random
 import os
