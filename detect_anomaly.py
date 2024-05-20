@@ -68,7 +68,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         return int(after >= before)
     
     bias_time, bias, gt = [], [], []
-    for i in range(len(quarterly_eps_df) - window + 1):
+    for i in tqdm(range(len(quarterly_eps_df) - window + 1), leave=False, desc="Fetching: "):
         
         if quarterly_eps_df.iloc[i]['surprise'] == 'None':
             continue

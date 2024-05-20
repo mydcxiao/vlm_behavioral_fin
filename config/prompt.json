@@ -1,31 +1,19 @@
 {
-    "llama": {
-        "prompt": "{inst}"
-    },
-    "llama-chat": {
+    "llama-2-7b-chat": {
         "prompt": "[INST] Please consider the following financial analysis question and its background information. After that, I will give you a series of EPS and historical stock prices data to let you predict the stock trend after the lastest EPS report date.\n\nQuestion: {}\nQuestion Background: {}\nResolution Criterion: {}\n\nHistory of Stock Price: {}\nHistory of EPS: {}\n\nPlease predict the stock trend at the scale of 0-1\n0 - the stock price goes down after the report date\n1 - the stock price goes up or stay the same after the report date\n\nGuidelines:\n- You don't need to access any external sources. Just consider the information provided.\n- Focus on the historical data and its change instead of titles or texts.\n- Remember your final indication for the prediction of stock trend should be a number at the end of the response.\n\nYour response should look like the following:\nThought: {{ Insert your thinking }} Rating: {{ Insert answer here }}. [/INST]",
         "split": "[/INST]"
     },
-    "gemma": {
-        "prompt": "{inst}"
-    },
-    "gemma-it": {
-        "prompt": "{inst}"
-    },
-    "mistral": {
-        "prompt": "{inst}"
-    },
-    "mistral-instruct": {
-        "prompt": "{inst}"
-    },
-    "gpt-3.5": {
-        "prompt": "{inst}"
-    },
     "gpt-4": {
-        "prompt": "{inst}"
+        "prompt": "Please consider the following financial analysis question and its background information. After that, I will give you a series of EPS and historical stock prices data to let you predict the stock trend after the lastest EPS report date.\n\nQuestion: {}\nQuestion Background: {}\nResolution Criterion: {}\n\nHistory of Stock Price: {}\nHistory of EPS: {}\n\nPlease predict the stock trend at the scale of 0-1\n0 - the stock price goes down after the report date\n1 - the stock price goes up or stay the same after the report date\n\nGuidelines:\n- You don't need to access any external sources. Just consider the information provided.\n- Focus on the historical data and its change instead of titles or texts.\n- Remember your final indication for the prediction of stock trend should be a number at the end of the response.\n\nYour response should look like the following:\nThought: {{ Insert your thinking }} Rating: {{ Insert answer here }}."
     },
     "llava": {
         "prompt": "USER: <image>\nPlease consider the following financial analysis question and its background information. After that, I will give you a series of EPS and historical stock prices data to let you predict the stock trend after the lastest EPS report date.\n\nQuestion: {}\nQuestion Background: {}\nResolution Criterion: {}\n\nHistory of Stock Price: {}\nHistory of EPS: {}\n\nPlease predict the stock trend at the scale of 0-1\n0 - the stock price goes down after the report date\n1 - the stock price goes up or stay the same after the report date\n\nGuidelines:\n- You don't need to access any external sources. Just consider the information provided.\n- Focus on the historical data and its change instead of titles or texts.\n- Remember your final indication for the prediction of stock trend should be a number at the end of the response.\n\nYour response should look like the following:\nThought: {{ Insert your thinking }} Rating: {{ Insert answer here }}.\nASSISTANT:",
         "split": "ASSISTANT:"
+    },
+    "MobileVLM": {
+        "prompt": "Please consider the following financial analysis question and its background information. After that, I will give you a series of EPS and historical stock prices data to let you predict the stock trend after the lastest EPS report date.\n\nQuestion: {}\nQuestion Background: {}\nResolution Criterion: {}\n\nHistory of Stock Price: {}\nHistory of EPS: {}\n\nPlease predict the stock trend at the scale of 0-1\n0 - the stock price goes down after the report date\n1 - the stock price goes up or stay the same after the report date\n\nGuidelines:\n- You don't need to access any external sources. Just consider the information provided.\n- Focus on the historical data and its change instead of titles or texts.\n- Remember your final indication for the prediction of stock trend should be a number at the end of the response.\n\nYour response should look like the following:\nThought: {{ Insert your thinking }} Rating: {{ Insert answer here }}."
+    },
+    "MGM": {
+        "prompt": "Please consider the following financial analysis question and its background information. After that, I will give you a series of EPS and historical stock prices data to let you predict the stock trend after the lastest EPS report date.\n\nQuestion: {}\nQuestion Background: {}\nResolution Criterion: {}\n\nHistory of Stock Price: {}\nHistory of EPS: {}\n\nPlease predict the stock trend at the scale of 0-1\n0 - the stock price goes down after the report date\n1 - the stock price goes up or stay the same after the report date\n\nGuidelines:\n- You don't need to access any external sources. Just consider the information provided.\n- Focus on the historical data and its change instead of titles or texts.\n- Remember your final indication for the prediction of stock trend should be a number at the end of the response.\n\nYour response should look like the following:\nThought: {{ Insert your thinking }} Rating: {{ Insert answer here }}."
     }
 }

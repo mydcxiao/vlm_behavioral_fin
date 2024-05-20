@@ -1,4 +1,6 @@
-export MODEL="llava"
+# export MODEL="llava"
+# export MODEL="MobileVLM"
+export MODEL="MGM"
 export WINDOW_SIZE=16
 export TICKER=""
 
@@ -7,5 +9,6 @@ python gen.py \
  --window_size $WINDOW_SIZE \
  --ticker $TICKER \
  --image \
- --quant \
+ --load_4bit \
+#  --load_8bit \
 #  --save_image \

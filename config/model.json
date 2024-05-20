@@ -1,13 +1,5 @@
 {
-    "llama": {
-        "API_URL": "https://api-inference.huggingface.co/models/meta-llama/Llama-2-7b-hf",
-        "headers": {
-            "Authorization": "Bearer ",
-            "Content-Type": "application/json"
-        },
-        "model_id": "meta-llama/Llama-2-7b-hf"
-    },
-    "llama-chat": {
+    "llama-2-7b-chat": {
         "API_URL": "https://api-inference.huggingface.co/models/meta-llama/Llama-2-7b-chat-hf",
         "headers": {
             "Authorization": "Bearer ",
@@ -15,45 +7,16 @@
         },
         "model_id": "meta-llama/Llama-2-7b-chat-hf"
     },
-    "gemma": {
-        "API_URL": "https://api-inference.huggingface.co/models/google/gemma-7b",
-        "headers": {
-            "Authorization": "Bearer ",
-            "Content-Type": "application/json"
-        },
-        "model_id": "google/gemma-7b"
-    },
-    "gemma-it": {
-        "API_URL": "https://api-inference.huggingface.co/models/google/gemma-7b-it",
-        "headers": {
-            "Authorization": "Bearer ",
-            "Content-Type": "application/json"
-        },
-        "model_id": "google/gemma-7b-it"
-    },
-    "mistral": {
-        "API_URL": "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-v0.1",
-        "headers": {
-            "Authorization": "Bearer ",
-            "Content-Type": "application/json"
-        },
-        "model_id": "mistralai/Mistral-7B-v0.1"
-    },
-    "mistral-instruct": {
-        "API_URL": "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-        "headers": {
-            "Authorization": "Bearer ",
-            "Content-Type": "application/json"
-        },
-        "model_id": "mistralai/Mistral-7B-Instruct-v0.2"
-    },
-    "gpt-3.5": {
-        "model_id": "gpt-3.5-turbo"
-    },
     "gpt-4": {
         "model_id": "gpt-4-turbo"
     },
     "llava": {
         "model_id": "llava-hf/llava-1.5-7b-hf"
+    },
+    "MobileVLM": {
+        "model_id": "mtgv/MobileVLM_V2-7B"
+    },
+    "MGM": {
+        "model_id": "YanweiLi/MGM-7B-HD"
     }
 }

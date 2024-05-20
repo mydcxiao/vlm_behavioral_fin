@@ -4,3 +4,4 @@ data/*.csv
 **/__pycache__
 output/**.json
 output/exp*
+model_zoo/

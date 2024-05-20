@@ -8,6 +8,7 @@ import requests
 import json
 import time
 import argparse
+import sys
 import os
 import io
 import re
@@ -21,46 +22,23 @@ import matplotlib.dates as mdates
 from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
-from transformers import AutoTokenizer, AutoModelForCausalLM, GemmaTokenizer
-from transformers import AutoProcessor, LlavaForConditionalGeneration, AutoModelForPreTraining, AutoModel
+from functools import partial
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import AutoConfig, GenerationConfig
 from transformers import BitsAndBytesConfig
-from transformers import pipeline
-import accelerate
-
+from transformers import pipeline, Pipeline
 import torch
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MobileVLM'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
 from detect_anomaly import detect_recency_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
+from utils import inference_func, load_pretrained_llava
 
 
 def args_parser():
-    """
-    Parses command-line arguments to configure the script's execution parameters. This function defines several
-    options to customize the behavior of the script, such as choosing the model, whether to use an API, batch sizes,
-    and various file paths for input and output.
-
-    Arguments:
-        --model (str): Specifies the model name (defined in prompt config .json file) to be used, defaulting to 'llama-chat'.
-        --api (bool): If set, indicates that the script should use an API for inference, default is False.
-        --token (str): Provides the API token if API usage is enabled, default is an empty string.
-        --batch_size (int): Sets the batch size for processing, default is 4.
-        --prompt_cfg (str): Path to the JSON configuration file for prompts, default is 'config/prompt.json'.
-        --model_cfg (str): Path to the JSON configuration file for model settings, default is 'config/model.json'.
-        --output_dir (str): Directory where output files will be stored, default is 'output'.
-        --stock_file (str): Path to the historical stock data file, default is 'data/stock_history.csv'.
-        --eps_dir (str): Directory path for historical earnings per share data, default is 'data/eps_history/'.
-        --ticker (list of str): Allows multiple stock tickers to be specified, captures all arguments that appear.
-        --narrative (bool): If set, uses a narrative form of historical data, default is False (structured form of historical data).
-        --image (bool): If set, uses image inputs along with text, default is False.
-        --quant (bool): If set, enables quantization for model processing, default is False.
-        --bias_type (str): Specifies the type of bias to evaluate, default is 'recency'.
-        --window_size (int): Sets the window size for bias detection, default is 5.
-
-    Returns:
-        argparse.Namespace: Returns an object containing the parsed command-line arguments. Each argument is accessible
-        as an attribute of this object.
-    """
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default="llama-chat", help='Model name')
     parser.add_argument('--api', action='store_true', default=False, help='Use API')
@@ -74,7 +52,8 @@ def args_parser():
     parser.add_argument('--ticker', type=str, nargs='*', help='list of stock ticker')
     parser.add_argument('--narrative', action='store_true', default=False, help='use narrative string of input')
     parser.add_argument('--image', action='store_true', default=False, help='use image input string')
-    parser.add_argument('--quant', action='store_true', default=False, help='use quantization')
+    parser.add_argument('--load_8bit', action='store_true', default=False, help='use 8bit quantization')
+    parser.add_argument('--load_4bit', action='store_true', default=False, help='use 4bit quantization')
     parser.add_argument('--bias_type', type=str, default="recency", help='bias type')
     parser.add_argument('--window_size', type=int, default=5, help='window size for bias detection')
     parser.add_argument('--save_image', action='store_true', default=False, help='save image or not')
@@ -83,22 +62,6 @@ def args_parser():
 
 
 def load_json(prompt_path, model_path):
-    """
-    Loads JSON configuration files from specified paths. This function is designed to read two separate JSON files:
-    one containing prompt configurations and another containing model configurations. Both files are expected to be
-    in standard JSON format.
-
-    Parameters:
-    - prompt_path (str): The file path to the JSON file containing prompt configurations. This file should define
-      various prompts that might be used throughout the script.
-    - model_path (str): The file path to the JSON file containing model configurations. This file should define
-      settings and parameters related to the models used in the script.
-
-    Returns:
-    - tuple: Returns a tuple containing two dictionaries:
-        - prompt_dict (dict): A dictionary containing the configurations loaded from the prompt JSON file.
-        - model_dict (dict): A dictionary containing the configurations loaded from the model JSON file.
-    """
     with open(prompt_path, "r") as prompt_file:
         prompt_dict = json.load(prompt_file)
 
@@ -109,43 +72,13 @@ def load_json(prompt_path, model_path):
 
 
 def load_stock_data(path):
-    """
-    Loads stock price data from yfinance stock history CSV file specified by the path. The function expects the CSV file to have a
-    multi-level header in the first two rows and the first column used as the index, typically representing dates.
-
-    Parameters:
-    - path (str): The file path to the CSV containing the stock price data. This path should point to a properly
-      formatted CSV file with multi-level headers, which often include stock identifiers and price attributes like
-      'Open', 'Close', 'High', 'Low', etc.
-
-    Returns:
-    - pd.DataFrame: A pandas DataFrame containing the loaded stock price data. The DataFrame will have a
-      multi-index header and dates as the index, facilitating easy manipulation and analysis of stock prices over time.
-    """
     prices = pd.read_csv(path, header=[0, 1], index_col=0)
     
     return prices
 
 
 class client(object):
-    """
-    A client class to handle requests to APIs or local model pipelines for text-only or multimodal predictions. 
-    It abstracts the complexities of different backends such as OpenAI's GPT models, Hugging Face models, or other custom API endpoints.
-
-    Attributes:
-    - url (str): The URL endpoint for custom APIs. Used if not interacting with OpenAI's API.
-    - headers (dict): Headers to be sent with requests, typically including authorization tokens.
-    - openai (bool): Flag to determine if this client is using OpenAI's API.
-    - model (str): The model identifier specified in model config file, e.g. 'config/model.json'.
-    - pipe (any): A Hugging Face pipeline for local model.
-    - gen_cfg (any): Configuration for generation tasks, used with local pipelines.
-    - image_input (bool): Flag to indicate if the client supports image input data for queries.
-
-    Methods:
-    - query(batched_message, batched_image=None): Sends a batch of messages, and optionally images, to the configured
-      backend (API or local model) and returns the responses.
-    """
-    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None, image_input=False):
+    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None, image_input=False, batch_inference=False):
         self.url = url
         self.headers = headers
         self.openai = openai
@@ -154,18 +87,9 @@ class client(object):
         self.pipe = pipe
         self.gen_cfg = gen_cfg
         self.image_input = image_input
+        self.batch_inference = batch_inference
     
     def query(self, batched_message, batched_image=None):
-        """
-        Processes a batch of messages and optionally images through the configured backend (API or local model).
-
-        Parameters:
-        - batched_message (list of str): List of text messages to be processed.
-        - batched_image (list of PIL.Image or similar, optional): List of image data, used if `image_input` is True.
-
-        Returns:
-        - list of str: Responses from the backend for each input message or image.
-        """
         if self.openai:
             if batched_image is not None:
                 raise NotImplementedError("Image input is not implemented for OpenAI API")
@@ -208,89 +132,120 @@ class client(object):
             
             return batched_response
         
-        else: 
-            if self.image_input and batched_image is not None:
-                batched_response = []
-                for message, image in zip(batched_message, batched_image):
-                    batched_response.append(self.pipe(image, prompt=message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text'])
+        else:
+            if self.batch_inference:
+                if self.image_input:
+                    batched_response = self.pipe(batched_message, batched_image)
+                else:
+                    batched_response = self.pipe(batched_message)
             else:
-                batched_response = [response[0]['generated_text'] for response in self.pipe(batched_message, generation_config=self.gen_cfg, clean_up_tokenization_spaces=True)]
+                batched_response = []
+                if self.image_input:
+                    for message, image in zip(batched_message, batched_image):
+                        if isinstance(self.pipe, Pipeline):
+                            batched_response.append(self.pipe(image, prompt=message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text'])
+                        else:
+                            batched_response.append(self.pipe(message, image))
+                else:
+                    for message in batched_message:
+                        if isinstance(self.pipe, Pipeline):
+                            batched_response.append(self.pipe(message, generate_kwargs=self.gen_cfg.to_dict())[0]['generated_text'])
+                        else:
+                            batched_response.append(self.pipe(message))
             
             return batched_response
  
             
-def init_model(model_id, model_dict, api=False, token=None, image=False, quant=False):
-    """
-    Initializes and configures a model client for API or local model inference based on specified parameters.
-    This function can set up clients for both external APIs and local inference pipelines, supporting
-    optional features such as image input and quantization.
-
-    Parameters:
-    - model_id (str): The identifier for the model to be initialized.
-    - model_dict (dict): A dictionary loaded from model config JSON file.
-    - api (bool, optional): Specifies whether to use a model API. Defaults to False.
-    - token (str, optional): The API token for authentication if using an API. Defaults to None.
-    - image (bool, optional): Indicates whether the model should support image inputs. Defaults to False.
-    - quant (bool, optional): Indicates whether to enable quantization for the model. Defaults to False.
-
-    Returns:
-    - client: An instance of the `client` class configured to interact with the specified model, either through
-      an API or a local inference pipeline.
-    """
+def init_model(model_id, model_dict, api=False, token=None, image=False, load_8bit=False, load_4bit=False):
     if api:
         if model_id in model_dict:
             if 'API_URL' in model_dict[model_id]:
                 url = model_dict[model_id]['API_URL']
-                headers = model_dict[model_id]['HEADERS']
+                headers = model_dict[model_id]['headers']
                 headers['Authorization'] = f"Bearer {token}"
                 return client(url=url, headers=headers, openai=False)
             else:
-                model = model_dict[model_id]['model_id']
-                return client(model=model, openai=True)
+                raise ValueError(f"'API_URL' not found in model.json for model {model_id}")
+        elif 'gpt' in model_id:
+            model = model_dict[model_id]['model_id']
+            return client(model=model, openai=True)
         else:
             raise ValueError(f"Model {model_id} not found in model.json")
     else:
         try:
             model_id = model_dict[model_id]['model_id']
-            cfg = AutoConfig.from_pretrained(model_id)
-            gen_cfg = GenerationConfig.from_pretrained(model_id)
-            if gen_cfg.max_length == 20:
-                gen_cfg.max_length = 4096*2
-            gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
-            cfg.pad_token_id if hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
-            if quant:
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.float16
-                )
+            try:
+                cfg = AutoConfig.from_pretrained(model_id)
+                gen_cfg = GenerationConfig.from_pretrained(model_id)
+                if gen_cfg.max_length == 20:
+                    gen_cfg.max_length = 4096*2
+                gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
+                cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
+            except:
+                cfg = None
+                gen_cfg = None
+            batch_inference = False
             if image:
-                if quant:
-                    pipe = pipeline("image-to-text", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype, model_kwargs={"quantization_config": quantization_config})
-                else:  
-                    pipe = pipeline("image-to-text", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype)        
+                if 'llava' in model_id:
+                    processor, model = load_pretrained_llava(model_id, load_4bit=load_4bit, load_8bit=load_8bit)
+                    if inference_func['llava']['batch'] is not None:
+                        pipe = partial(inference_func['llava']['batch'], model=model, processor=processor)
+                        batch_inference = True
+                    elif inference_func['llava']['once'] is not None:
+                        pipe = partial(inference_func['llava']['once'], model=model, processor=processor)
+                    else:
+                        raise ValueError("inference function is None for model llava")
+                elif 'MobileVLM' in model_id:
+                    from MobileVLM.mobilevlm.model.mobilevlm import load_pretrained_model
+                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, load_8bit, load_4bit)
+                    conv_mode = "v1"
+                    if inference_func['MobileVLM']['batch'] is not None:
+                        pipe = partial(inference_func['MobileVLM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, generation_config=gen_cfg)
+                        batch_inference = True
+                    elif inference_func['MobileVLM']['once'] is not None:
+                        pipe = partial(inference_func['MobileVLM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, generation_config=gen_cfg)
+                    else:
+                        raise ValueError("inference function is None for model MobileVLM")
+                elif 'MGM' in model_id:
+                    from MGM.mgm.model.builder import load_pretrained_model
+                    from MGM.mgm.mm_utils import get_model_name_from_path
+                    from huggingface_hub import snapshot_download
+                    model_name = get_model_name_from_path(model_id)
+                    local_dir = f"model_zoo/{model_name}"
+                    if not os.path.exists(local_dir):
+                        snapshot_download(model_id, local_dir=local_dir)
+                    model_id = local_dir
+                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, None, model_name, load_8bit, load_4bit)
+                    if '8x7b' in model_name.lower():
+                        conv_mode = "mistral_instruct"
+                    elif '34b' in model_name.lower():
+                        conv_mode = "chatml_direct"
+                    elif '2b' in model_name.lower():
+                        conv_mode = "gemma"
+                    else:
+                        conv_mode = "vicuna_v1"
+                    ocr = False
+                    if inference_func['MGM']['batch'] is not None:
+                        pipe = partial(inference_func['MGM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
+                        batch_inference = True
+                    elif inference_func['MGM']['once'] is not None:
+                        pipe = partial(inference_func['MGM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
+                    else:
+                        raise ValueError("inference function is None for model MGM")
+                else:
+                    raise ValueError(f"Model {model_id} not supported for image input")
             else:
-                if quant:
+                if load_4bit:
+                    quantization_config = BitsAndBytesConfig( load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
                     pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype, model_kwargs={"quantization_config": quantization_config})
                 else:  
                     pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype)
-            return client(pipe=pipe, gen_cfg=gen_cfg, image_input=image)
+            return client(pipe=pipe, gen_cfg=gen_cfg, image_input=image, batch_inference=batch_inference)
         except Exception as e:
             raise e
   
             
 def construct_message(model, prompt_dict, instruction):
-    """
-    Constructs a message based on a predefined prompt template and specific instructions provided. This function
-    formats a template string by inserting the provided instruction elements into placeholders in the template.
-
-    Parameters:
-    - model (str): The identifier for the model, which corresponds to a specific key in the `prompt_dict` dictionary.
-    - prompt_dict (dict): A dictionary loaded from prompt config JSON file.
-    - instruction (list of str): A list of string elements that are used to fill in the placeholders in the prompt template.
-
-    Returns:
-    - str: The fully constructed message that has been formatted with the specific instructions.
-    """
     prompt_template = prompt_dict[model]['prompt']
     message = prompt_template.format(*instruction)
     
@@ -298,31 +253,11 @@ def construct_message(model, prompt_dict, instruction):
 
 
 def construct_assistant_message(response, split):
-    """
-    Constructs an assistant message for multi-turn char models.
-    Parameters:
-        - split (str): The delimiter used to split the model returned string. The segment after this split will be the response string.
-    """
     content = response.split(split)[-1].strip()
     return content
 
 
 def construct_instruction(args, ticker, start_time, end_time):
-    """
-    Constructs a structured instruction set for querying or processing based on historical stock price and EPS data.
-    The function combines provided arguments with internally generated text components to formulate a complete
-    instruction that describes a task related to stock trend prediction based on EPS surprises.
-
-    Parameters:
-    - args (Namespace): Command-line arguments.
-    - ticker (str): The stock ticker symbol for which the instruction is being constructed.
-    - start_time (str): The starting date/time for the data period of interest.
-    - end_time (str): The ending date/time for the data period of interest.
-
-    Returns:
-    - list of str: A list of string elements that together form a comprehensive instruction set. This list includes
-      a question component, background information, criteria for analysis, and formatted stock and EPS data descriptions.
-    """
     question = "Stock trending prediction based off historical stocks' price and EPS data."
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
     criterion = "According to the historical stock price and EPS data, predict the stock trending after the latest EPS report date with the EPS surprise reported."
@@ -337,23 +272,6 @@ def construct_instruction(args, ticker, start_time, end_time):
 
 
 def construct_stock_history(file, ticker, start, end):
-    """
-    Retrieves and formats stock price history for a given ticker over a specified time range. This function
-    extracts the stock's opening and closing prices from a DataFrame and provides both a structured string
-    representation and a narrative description of the price history.
-
-    Parameters:
-    - file (pd.DataFrame): A DataFrame containing stock price data with a multi-level column header, where
-      the second level of the header includes the ticker symbols.
-    - ticker (str): The stock ticker symbol for which to retrieve and format history data.
-    - start (str): The start date for the period over which to retrieve stock data, formatted as 'YYYY-MM-DD'.
-    - end (str): The end date for the period, formatted similarly to the start date.
-
-    Returns:
-    - tuple (str, str): A tuple containing two strings:
-        1. structured_str: A structured string representation of the stock price data, formatted as a table.
-        2. narrative: A narrative description of the stock's daily opening and closing prices over the specified period.
-    """
     dataframe = file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock = comp_stock.loc[start:end]
@@ -370,23 +288,6 @@ def construct_stock_history(file, ticker, start, end):
 
 
 def construct_eps_history(dir, ticker, start, end):
-    """
-    Retrieves and formats the earnings per share (EPS) history for a given ticker within a specified date range.
-    This function searches for an EPS data file in the specified directory, loads the data, and then extracts
-    relevant EPS records between the start and end dates. It returns both a structured string format and a
-    narrative description of the EPS data.
-
-    Parameters:
-    - dir (str): The directory path where EPS data JSON files are stored.
-    - ticker (str): The stock ticker symbol for which to retrieve EPS data.
-    - start (str): The start date for the period over which to retrieve EPS data, formatted as 'YYYY-MM-DD'.
-    - end (str): The end date for the period, formatted similarly to the start date.
-
-    Returns:
-    - tuple (str, str): A tuple containing two strings:
-        1. structured_str: A structured string representation of the EPS data, formatted as a table.
-        2. narrative: A narrative description of each EPS entry.
-    """
     files = os.listdir(dir)
     file = None
     for f in files:
@@ -411,21 +312,6 @@ def construct_eps_history(dir, ticker, start, end):
 
 
 def construct_images(file, dir, ticker, start, end):
-    """
-    Generates a visual representation (candlestick chart) of stock price movements alongside important EPS (Earnings
-    Per Share) report dates within a specified period. This function integrates stock data and EPS data to highlight
-    significant financial reporting dates directly on the chart.
-
-    Parameters:
-    - file (pd.DataFrame): A DataFrame containing historical stock data with a multi-level header.
-    - dir (str): The directory path where EPS data files are stored.
-    - ticker (str): The stock ticker symbol for which the image is being constructed.
-    - start (str): The start date for the period over which to generate the image, formatted as 'YYYY-MM-DD'.
-    - end (str): The end date for the period, formatted similarly to the start date.
-
-    Returns:
-    - io.BytesIO: A buffer containing the generated image data, which can be saved to a file or displayed directly.
-    """
     dataframe = file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock = comp_stock.loc[start:end]
@@ -517,19 +403,6 @@ def construct_images(file, dir, ticker, start, end):
 
 
 def parse_answer(response, pattern):
-    """
-    Parses a textual response to extract and evaluate numerical information based on a given pattern and split criteria.
-    This function is designed to split the response at a specified delimiter, apply a regular expression pattern to find
-    numeric values, and then determine a binary outcome based on the bias numeric value extracted.
-
-    Parameters:
-    - response (str): The textual response from which to extract the number.
-    - pattern (re.Pattern): A compiled regular expression pattern used to find all numeric strings in the selected segment.
-
-    Returns:
-    - int: Returns 1 if the bias numeric value found is greater than or equal to 0.5, otherwise returns 0.
-    - None: Returns None if no numeric value is found or if the extraction and conversion to float fail.
-    """
     parts = pattern.findall(response)
     
     try:
@@ -546,7 +419,7 @@ def main():
     
     # load config JSON files and init models
     prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
-    client = init_model(args.model, model_dict, args.api, args.token, args.image, args.quant)
+    client = init_model(args.model, model_dict, args.api, args.token, args.image, args.load_8bit, args.load_4bit)
     
     # get all possible tickers if no ticker is provided
     if len(args.ticker) == 0:
@@ -568,12 +441,13 @@ def main():
     
     # evaluate bias
     bias_data = []
-    for ticker in tickers:
+    for ticker in tqdm(tickers, desc="Company: "):
         if args.bias_type == 'recency':
             time_period, bias, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=args.window_size)
         for i in range(len(time_period)):
             bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
-
+    print(f"Finished fetching {len(bias_data)} bias datapoints!")
+    
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
@@ -597,7 +471,7 @@ def main():
             batched_bias.append(bias)
             batched_gt.append(gt)
        
-        batched_image = [Image.open(buf) for buf in batched_imgbuf] if args.image else None
+        batched_image = [Image.open(buf).convert('RGB') for buf in batched_imgbuf] if args.image else None
         batched_response = client.query(batched_message, batched_image)
         batched_response = [construct_assistant_message(response, split) for response in batched_response]
         batched_answer = [parse_answer(response, pattern) for response in batched_response]
@@ -634,6 +508,7 @@ def main():
     
     stats = f"total: {total}\ncorrect: {correct}\naccuracy: {correct/total if total else 0}\nwrong: {wrong}\nwrong by bias: {wrong_by_bias}\nbias percentage: {wrong_by_bias/total if total else 0}\nwrong by bias percentage: {wrong_by_bias/wrong if wrong else 0}\nno answer: {no_answer}\nno answer percentage: {no_answer/total if total else 0}"
     with open(os.path.join(args.output_dir, output_file+'.txt'), "w") as f:
+        f.write(f"Model: {args.model}\nBias: {args.bias_type}\nWindow Size: {args.window_size}\n\n")
         f.write(stats)
     
     print(stats)
