@@ -1,6 +1,16 @@
 import torch
 import numpy as np
 
+
+def get_model_name(model_path):
+    model_path = model_path.strip("/")
+    model_paths = model_path.split("/")
+    if model_paths[-1].startswith('checkpoint-'):
+        return model_paths[-2] + "_" + model_paths[-1]
+    else:
+        return model_paths[-1]
+    
+
 def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
     from transformers import AutoProcessor, LlavaForConditionalGeneration
     from transformers import BitsAndBytesConfig

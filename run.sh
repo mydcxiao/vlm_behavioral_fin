@@ -2,7 +2,7 @@ export CUDA_VISIBLE_DEVICES=0
 # export MODEL="llava"
 export MODEL="MobileVLM"
 # export MODEL="MGM"
-export WINDOW_SIZE=20
+export WINDOW_SIZE=12
 export TICKER=""
 
 python gen.py \

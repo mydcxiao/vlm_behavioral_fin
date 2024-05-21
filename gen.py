@@ -35,7 +35,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
 from detect_anomaly import detect_recency_bias, detect_authoritative_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
-from utils import inference_func, load_pretrained_llava
+from utils import inference_func, load_pretrained_llava, get_model_name
 
 
 def args_parser():
@@ -460,8 +460,18 @@ def main():
     
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
-    os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
-    output_file = f"exp_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}"
+    model_name = get_model_name(model_dict[args.model]['model_id'])
+    if args.load_8bit:
+        model_name += "-8bit"
+    if args.load_4bit:
+        assert not args.load_8bit, "Cannot load both 8bit and 4bit simultaneously!"
+        model_name += "-4bit"
+    args.output_dir = os.path.join(args.output_dir, model_name)
+    os.makedirs(args.output_dir, exist_ok=True)
+    if args.save_image:
+        os.makedirs(os.path.join(args.output_dir, 'images'), exist_ok=True)
+    output_file = f"exp_{dt.datetime.now().strftime('%Y%m%d%H%M%S')}_{args.bias_type}_{args.window_size}"
+    
     # evaluate model
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
     pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
