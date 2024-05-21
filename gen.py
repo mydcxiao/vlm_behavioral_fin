@@ -442,11 +442,18 @@ def main():
         stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     
+    # define bias detection function
+    if args.bias_type == 'recency':
+        detect_func = detect_recency_bias
+    elif args.bias_type == 'authoritative':
+        detect_func = detect_authoritative_bias
+    else:
+        raise ValueError(f"Unsupported bias type: {args.bias_type}")
+    
     # evaluate bias
     bias_data = []
     for ticker in tqdm(tickers, desc="Company: "):
-        if args.bias_type == 'recency':
-            time_period, bias, gt = detect_recency_bias(ticker, args.stock_file, args.eps_dir, window=args.window_size)
+        time_period, bias, gt = detect_func(ticker, args.stock_file, args.eps_dir, window=args.window_size)
         for i in range(len(time_period)):
             bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
     print(f"Finished fetching {len(bias_data)} bias datapoints!")
