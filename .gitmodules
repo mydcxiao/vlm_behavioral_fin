@@ -1,6 +1,6 @@
-[submodule "MGM"]
-	path = MGM
-	url = https://github.com/dvlab-research/MGM.git
 [submodule "MobileVLM"]
 	path = MobileVLM
 	url = https://github.com/Meituan-AutoML/MobileVLM.git
+[submodule "MGM"]
+	path = MGM
+	url = https://github.com/dvlab-research/MGM.git
