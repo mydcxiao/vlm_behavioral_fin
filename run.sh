@@ -1,7 +1,7 @@
 # export MODEL="llava"
-# export MODEL="MobileVLM"
-export MODEL="MGM"
-export WINDOW_SIZE=16
+export MODEL="MobileVLM"
+# export MODEL="MGM"
+export WINDOW_SIZE=20
 export TICKER=""
 
 python gen.py \

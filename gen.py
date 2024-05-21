@@ -253,7 +253,10 @@ def construct_message(model, prompt_dict, instruction):
 
 
 def construct_assistant_message(response, split):
-    content = response.split(split)[-1].strip()
+    if split:
+        content = response.split(split)[-1].strip()
+    else:
+        content = response.strip() # s.split() still split the newline char if split is None
     return content
 
 
