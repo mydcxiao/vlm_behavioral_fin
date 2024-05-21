@@ -1,3 +1,4 @@
+export CUDA_VISIBLE_DEVICES=0
 # export MODEL="llava"
 export MODEL="MobileVLM"
 # export MODEL="MGM"
@@ -9,6 +10,6 @@ python gen.py \
  --window_size $WINDOW_SIZE \
  --ticker $TICKER \
  --image \
- --load_4bit \
+#  --load_4bit \
 #  --load_8bit \
 #  --save_image \

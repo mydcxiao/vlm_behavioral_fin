@@ -33,7 +33,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MobileVLM'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
-from detect_anomaly import detect_recency_bias
+from detect_anomaly import detect_recency_bias, detect_authoritative_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
 from utils import inference_func, load_pretrained_llava
 
