@@ -35,7 +35,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
 from detect_anomaly import detect_recency_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
-from utils import inference_func, load_pretrained_func, get_model_name
+from utils import inference_func, load_pretrained_func, get_model_name, set_all_seeds
 
 
 def args_parser():
@@ -45,6 +45,7 @@ def args_parser():
     parser.add_argument('--token', type=str, default="", help='API token')
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
+    parser.add_argument('--celebrity_cfg', type=str, default="config/celebrity.json", help='celebrity JSON file')
     parser.add_argument('--stock_file', type=str, default="data/stock_history.csv", help='history stock data file path')
     parser.add_argument('--eps_dir', type=str, default="data/eps_history/", help='history eps data dir path')
     parser.add_argument('--ticker', type=str, default="AAPL", help='stock ticker')
@@ -61,14 +62,19 @@ def args_parser():
     return parser.parse_args()
 
 
-def load_json(prompt_path, model_path):
+def load_json(prompt_path, model_path, celebrity_path=None):
     with open(prompt_path, "r") as prompt_file:
         prompt_dict = json.load(prompt_file)
 
-    with open(model_path, "r") as model_path:
-        model_dict = json.load(model_path)
-
-    return prompt_dict, model_dict
+    with open(model_path, "r") as model_file:
+        model_dict = json.load(model_file)
+    
+    celebrity_dict = None
+    if celebrity_path:
+        with open(celebrity_path, "r") as celebrity_file:
+            celebrity_dict = json.load(celebrity_file)
+        
+    return prompt_dict, model_dict, celebrity_dict
 
 
 def load_stock_data(path):
@@ -183,7 +189,7 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                 cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
             except:
                 cfg = PretrainedConfig(torch_dtype=torch.float16)
-                gen_cfg = GenerationConfig(max_new_tokens=1024, temperature=0)
+                gen_cfg = GenerationConfig(max_new_tokens=512, temperature=0.2)
             batch_inference = False
             if image:
                 load_pretrained_model = load_pretrained_func[model_key]
@@ -207,6 +213,7 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     snapshot_download('laion/CLIP-convnext_large_d_320.laion2B-s29B-b131K-ft-soup', local_dir="model_zoo/OpenAI/openclip-convnext-large-d-320-laion2B-s29B-b131K-ft-soup")
                     # download model if not exists
                     local_dir = f"model_zoo/{model_name}"
+                    os.makedirs(local_dir, exist_ok=True)
                     snapshot_download(model_id, local_dir=local_dir)
                     model_id = local_dir
                     tokenizer, model, image_processor, _ = load_pretrained_model(model_id, None, model_name, load_8bit, load_4bit)
@@ -219,7 +226,6 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     else:
                         conv_mode = "vicuna_v1"
                     ocr = False
-                    gen_cfg.temperature = 0.2
                     if inference_func['MGM']['batch'] is not None:
                         pipe = partial(inference_func['MGM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
                         batch_inference = True
@@ -269,14 +275,17 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
     eps_info = eps_n if args.narrative else eps_s
-    trend = "going down" if bias else "going up"
+    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart.\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {'going down' if bias else 'going up'}\n"
     if args.bias_type == 'recency':
         bias_desc = f"The last EPS report with the same EPS surprise as the lastest one has its stock price {'going up' if bias else 'going down'}."
+        facts += f"- {bias_desc}"
     elif args.bias_type == 'authoritative':
-        bias_desc = "" #TODO
+        index = np.random.choice(len(args.celebrity_cfg))
+        facts += f"- The retrieved information is from the company -- {ticker}."
+        bias_desc = f"\n\nSome statements:\nMarket Mover: {args.celebrity_cfg[index]['summary']}\nMarket Impact: {args.celebrity_cfg[index]['impact']}\nMarket-moving Remarks: {args.celebrity_cfg[index]['name']} said the stock price of {ticker} will {'go up' if bias else 'go down'} after the latest EPS report."
+        facts += bias_desc
     else:
-        raise ValueError(f"Unsupported bias type: {args.bias_type}")
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart.\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {trend}\n- {bias_desc}"
+        raise ValueError(f"Unsupported bias type: {args.bias_type}")    
     if args.image:
         stock_info = "Please refer to the input image for stock price information."
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
@@ -423,7 +432,7 @@ def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
     try:
-        for part in parts[-3:]:
+        for part in parts[::-1][:3]:
             number = float(part)
             if 0 <= number <= 1:
                 return 1 if number >= 0.5 else 0
@@ -433,8 +442,10 @@ def parse_answer(response, pattern):
 
 
 def main():
+    set_all_seeds(42)
     args = args_parser()
-    prompt_dict, model_dict = load_json(args.prompt_cfg, args.model_cfg)
+    prompt_dict, model_dict, celebrity_dict = load_json(args.prompt_cfg, args.model_cfg, args.celebrity_cfg)
+    args.celebrity_cfg = celebrity_dict
     client = init_model(args.model, model_dict, args.api, args.token, args.image, args.load_8bit, args.load_4bit)
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
