@@ -23,7 +23,7 @@ from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
 from functools import partial
-from transformers import AutoConfig, GenerationConfig
+from transformers import AutoConfig, GenerationConfig, PretrainedConfig
 from transformers import BitsAndBytesConfig
 from transformers import pipeline, Pipeline
 
@@ -45,7 +45,6 @@ def args_parser():
     parser.add_argument('--token', type=str, default="", help='API token')
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
-    parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
     parser.add_argument('--stock_file', type=str, default="data/stock_history.csv", help='history stock data file path')
     parser.add_argument('--eps_dir', type=str, default="data/eps_history/", help='history eps data dir path')
     parser.add_argument('--ticker', type=str, default="AAPL", help='stock ticker')
@@ -56,6 +55,8 @@ def args_parser():
     parser.add_argument('--load_8bit', action='store_true', default=False, help='use 8bit quantization')
     parser.add_argument('--load_4bit', action='store_true', default=False, help='use 4bit quantization')
     parser.add_argument('--bias_type', type=str, default="recency", help='bias type')
+    parser.add_argument('--save', action='store_true', default=False, help='save output')
+    parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
     
     return parser.parse_args()
 
@@ -181,8 +182,8 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                 gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
                 cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
             except:
-                cfg = None
-                gen_cfg = None
+                cfg = PretrainedConfig(torch_dtype=torch.float16)
+                gen_cfg = GenerationConfig(max_new_tokens=1024, temperature=0)
             batch_inference = False
             if image:
                 load_pretrained_model = load_pretrained_func[model_key]
@@ -218,6 +219,7 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     else:
                         conv_mode = "vicuna_v1"
                     ocr = False
+                    gen_cfg.temperature = 0.2
                     if inference_func['MGM']['batch'] is not None:
                         pipe = partial(inference_func['MGM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
                         batch_inference = True
@@ -260,16 +262,28 @@ def construct_assistant_message(response, split):
     return content
 
 
-def construct_instruction(args, ticker, start_time, end_time):
-    question = "Stock trending prediction based off historical stocks' price and EPS data."
-    background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected (or expected) EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
-    criterion = "According to the historical stock price and EPS data, predict the stock trending after the latest EPS report date with the EPS surprise reported."
-    stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
+def construct_instruction(args, ticker, start_time, end_time, bias):
+    question = "Will the weekly average stock price goes up after the lastest EPS report?"
+    background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
+    criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCES."
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
-    if args.narrative:
-        instruction = [question, background, criterion, stock_n, eps_n]
+    retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
+    eps_info = eps_n if args.narrative else eps_s
+    trend = "going down" if bias else "going up"
+    if args.bias_type == 'recency':
+        bias_desc = f"The last EPS report with the same EPS surprise as the lastest one has its stock price {'going up' if bias else 'going down'}."
+    elif args.bias_type == 'authoritative':
+        bias_desc = "" #TODO
     else:
-        instruction = [question, background, criterion, stock_s, eps_s]
+        raise ValueError(f"Unsupported bias type: {args.bias_type}")
+    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart.\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {trend}\n- {bias_desc}"
+    if args.image:
+        stock_info = "Please refer to the input image for stock price information."
+        instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
+    else:
+        stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
+        stock_info = stock_n if args.narrative else stock_s
+        instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
     
     return instruction
 
@@ -409,10 +423,11 @@ def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
     try:
-        number = float(parts[-1])
-        if number < 0 or number > 1:
-            return None
-        return 1 if number >= 0.5 else 0
+        for part in parts[-3:]:
+            number = float(part)
+            if 0 <= number <= 1:
+                return 1 if number >= 0.5 else 0
+        return None
     except:
         return None
 
@@ -423,20 +438,24 @@ def main():
     client = init_model(args.model, model_dict, args.api, args.token, args.image, args.load_8bit, args.load_4bit)
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
-    instruction = construct_instruction(args, args.ticker, args.start_time, args.end_time)
-    instruction[-2] = 'refer to input image' if args.image else None
+    bias = 1
+    instruction = construct_instruction(args, args.ticker, args.start_time, args.end_time, bias)
     message = construct_message(args.model, prompt_dict, instruction)
     image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
     image = Image.open(image_buf) if args.image else None
     response = client.query([message], [image])[0]
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
+    print('Raw Answer:', response)
+    sys.stdout.flush()
     response = construct_assistant_message(response, split)
-    os.makedirs(args.output_dir, exist_ok=True)
-    json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
-    image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
+    if args.save:
+        os.makedirs(args.output_dir, exist_ok=True)
+        json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
+        image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
     image_buf.close() if args.image else None
     pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
-    print(response)
+    print('Split Answer:', response)
+    sys.stdout.flush()
     print('Parsed Answer:', parse_answer(response, pattern))
 
 

@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 
 def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
+    assert window > 1, "Window size must be greater than 1, otherwise, it only contains itself."
     dataframe = stock_file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock.columns.name = None
@@ -51,20 +52,25 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0      
         last_up_or_down = None
         bias_diff = 0
+        bias_same = 0
         no_surprise_report = False
+        threshold = min(0.8, (window - 2) / (window - 1))
         for j in range(i+1, i+window):
             if quarterly_eps_df.iloc[j]['surprise'] == 'None':
                 no_surprise_report = True
                 break
             
             if (float(quarterly_eps_df.iloc[j]['surprise']) >= 0) == surprise:
-                last_up_or_down = _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) if last_up_or_down is None else last_up_or_down
-                if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != last_up_or_down:
-                    bias_diff += 1
+                if last_up_or_down is None:
+                    last_up_or_down = _up_or_down(quarterly_eps_df.iloc[j]['reportedDate'])
+                    bias_same += 1
                 else:
-                    bias_diff -= 1
-                    
-        if bias_diff <= 0 or no_surprise_report:
+                    if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != last_up_or_down:
+                        bias_diff += 1
+                    else:
+                        bias_same += 1
+        
+        if bias_same == 0 or bias_diff / (bias_diff + bias_same) < threshold or no_surprise_report:
             continue
         
         bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
@@ -75,6 +81,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
 
 
 def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
+    assert window > 1, "Window size must be greater than 1, otherwise, it only contains itself."
     dataframe = stock_file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
     comp_stock.columns.name = None
@@ -114,8 +121,8 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
         
         surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0      
         gt_up_or_down = _up_or_down(quarterly_eps_df.iloc[i]['reportedDate'])
-        # bias_diff = 0
         surprise_trend_diff = False
+        surprise_same = 0
         no_surprise_report = False
         for j in range(i+1, i+window):
             if quarterly_eps_df.iloc[j]['surprise'] == 'None':
@@ -123,14 +130,11 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
                 break
             
             if (float(quarterly_eps_df.iloc[j]['surprise']) >= 0) == surprise:
+                surprise_same += 1
                 if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != gt_up_or_down:
                     surprise_trend_diff = True
-                #     bias_diff += 1
-                # else:
-                #     bias_diff -= 1
                     
-        # if bias_diff <= 0 or no_surprise_report:
-        if surprise_trend_diff or no_surprise_report:
+        if surprise_trend_diff or surprise_same / (window - 1) < 0.5 or no_surprise_report:
             continue
         
         bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
