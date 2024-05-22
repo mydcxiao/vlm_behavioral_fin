@@ -304,7 +304,7 @@ def construct_stock_history(file, ticker, start, end):
     comp_stock = comp_stock[['Open', 'Close']]
     comp_stock.columns.name = None
     comp_stock.reset_index(inplace=True)
-    structured_str = comp_stock.to_string(header=True, index=False)
+    structured_str = comp_stock.to_csv(header=True, index=False)
     narrative = '\n'.join([
                 f"On {row.Date}, the stock opened at {row.Open} and closed at {row.Close}."
                 for row in comp_stock.itertuples()
@@ -328,9 +328,10 @@ def construct_eps_history(dir, ticker, start, end):
     quarterly_eps = eps_dict['quarterlyEarnings']
     quarterly_eps_df = pd.DataFrame(quarterly_eps)
     quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
-    structured_str = quarterly_eps_df.to_string(header=True, index=False)
+    quarterly_eps_df = quarterly_eps_df[['reportedDate', 'surprise']]
+    structured_str = quarterly_eps_df.to_csv(header=True, index=False)
     narrative = '\n'.join([
-                f"For the quarter ending {row.fiscalDateEnding}, the EPS was {row.reportedEPS} reported on {row.reportedDate} and the estimated EPS was {row.estimatedEPS}. The surprise was {row.surprise} with a percentage of {row.surprisePercentage}."
+                f"The EPS was reported on {row.reportedDate} and the surprise was {row.surprise}."
                 for row in quarterly_eps_df.itertuples()
                 ])
    
