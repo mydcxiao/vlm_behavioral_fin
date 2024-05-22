@@ -11,6 +11,7 @@ import argparse
 import os
 import sys
 import io
+import re
 import warnings
 import datetime as dt
 import numpy as np
@@ -34,7 +35,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
 from detect_anomaly import detect_recency_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
-from utils import inference_func, load_pretrained_llava
+from utils import inference_func, load_pretrained_func, get_model_name
 
 
 def args_parser():
@@ -170,6 +171,7 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
             raise ValueError(f"Model {model_id} not found in model.json")
     else:
         try:
+            model_key = model_id
             model_id = model_dict[model_id]['model_id']
             try:
                 cfg = AutoConfig.from_pretrained(model_id)
@@ -183,17 +185,8 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                 gen_cfg = None
             batch_inference = False
             if image:
-                if 'llava' in model_id:
-                    processor, model = load_pretrained_llava(model_id, load_4bit=load_4bit, load_8bit=load_8bit)
-                    if inference_func['llava']['batch'] is not None:
-                        pipe = partial(inference_func['llava']['batch'], model=model, processor=processor)
-                        batch_inference = True
-                    elif inference_func['llava']['once'] is not None:
-                        pipe = partial(inference_func['llava']['once'], model=model, processor=processor)
-                    else:
-                        raise ValueError("inference function is None for model llava")
-                elif 'MobileVLM' in model_id:
-                    from MobileVLM.mobilevlm.model.mobilevlm import load_pretrained_model
+                load_pretrained_model = load_pretrained_func[model_key]
+                if 'MobileVLM' == model_key:
                     tokenizer, model, image_processor, _ = load_pretrained_model(model_id, load_8bit, load_4bit)
                     conv_mode = "v1"
                     if inference_func['MobileVLM']['batch'] is not None:
@@ -202,15 +195,18 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     elif inference_func['MobileVLM']['once'] is not None:
                         pipe = partial(inference_func['MobileVLM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, generation_config=gen_cfg)
                     else:
-                        raise ValueError("inference function is None for model MobileVLM")
-                elif 'MGM' in model_id:
-                    from MGM.mgm.model.builder import load_pretrained_model
-                    from MGM.mgm.mm_utils import get_model_name_from_path
+                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
+                elif 'MGM' == model_key:
                     from huggingface_hub import snapshot_download
-                    model_name = get_model_name_from_path(model_id)
+                    model_name = get_model_name(model_id)
+                    # download clip vision model if not exists
+                    os.makedirs("model_zoo/OpenAI/clip-vit-large-patch14-336", exist_ok=True)
+                    os.makedirs("model_zoo/OpenAI/openclip-convnext-large-d-320-laion2B-s29B-b131K-ft-soup", exist_ok=True)
+                    snapshot_download('openai/clip-vit-large-patch14-336', local_dir="model_zoo/OpenAI/clip-vit-large-patch14-336")
+                    snapshot_download('laion/CLIP-convnext_large_d_320.laion2B-s29B-b131K-ft-soup', local_dir="model_zoo/OpenAI/openclip-convnext-large-d-320-laion2B-s29B-b131K-ft-soup")
+                    # download model if not exists
                     local_dir = f"model_zoo/{model_name}"
-                    if not os.path.exists(local_dir):
-                        snapshot_download(model_id, local_dir=local_dir)
+                    snapshot_download(model_id, local_dir=local_dir)
                     model_id = local_dir
                     tokenizer, model, image_processor, _ = load_pretrained_model(model_id, None, model_name, load_8bit, load_4bit)
                     if '8x7b' in model_name.lower():
@@ -228,9 +224,16 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     elif inference_func['MGM']['once'] is not None:
                         pipe = partial(inference_func['MGM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
                     else:
-                        raise ValueError("inference function is None for model MGM")
+                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
                 else:
-                    raise ValueError(f"Model {model_id} not supported for image input")
+                    processor, model = load_pretrained_model(model_id, load_4bit=load_4bit, load_8bit=load_8bit)
+                    if inference_func[model_key]['batch'] is not None:
+                        pipe = partial(inference_func[model_key]['batch'], model=model, processor=processor)
+                        batch_inference = True
+                    elif inference_func[model_key]['once'] is not None:
+                        pipe = partial(inference_func[model_key]['once'], model=model, processor=processor)
+                    else:
+                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
             else:
                 if load_4bit:
                     quantization_config = BitsAndBytesConfig( load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
@@ -432,7 +435,9 @@ def main():
     json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
     image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
     image_buf.close() if args.image else None
+    pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")
     print(response)
+    print('Parsed Answer:', parse_answer(response, pattern))
 
 
 if __name__ == "__main__":

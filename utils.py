@@ -1,5 +1,11 @@
+import os
 import torch
 import numpy as np
+import transformers
+from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+import types
+from typing import List, Optional
+from packaging import version
 
 
 def get_model_name(model_path):
@@ -13,14 +19,14 @@ def get_model_name(model_path):
 
 def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
     from transformers import AutoProcessor, LlavaForConditionalGeneration
-    from transformers import BitsAndBytesConfig
     
     kwargs = {"device_map": device_map}
 
     if load_8bit:
-        kwargs['load_in_8bit'] = True
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
     elif load_4bit:
-        # kwargs['load_in_4bit'] = True
         kwargs['quantization_config'] = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_compute_dtype=torch.float16,
@@ -42,6 +48,53 @@ def inference_llava(prompts, images, model, processor):
     generated_text = processor.batch_decode(output, skip_special_tokens=True)
     
     return generated_text
+
+
+def load_pretrained_MobileVLM(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
+    from MobileVLM.mobilevlm.model.mobilellama import MobileLlamaForCausalLM
+    from MobileVLM.mobilevlm.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+    
+    kwargs = {"device_map": device_map}
+
+    if load_8bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
+    elif load_4bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type='nf4'
+        )
+    else:
+        kwargs['torch_dtype'] = torch.float16
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+    model = MobileLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+
+    mm_use_im_start_end = getattr(model.config, "mm_use_im_start_end", False)
+    mm_use_im_patch_token = getattr(model.config, "mm_use_im_patch_token", True)
+    if mm_use_im_patch_token:
+        tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
+    if mm_use_im_start_end:
+        tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
+    model.resize_token_embeddings(len(tokenizer))
+
+    vision_tower = model.get_vision_tower()
+    if 'v2' in getattr(model.config, "mm_projector_type", "ldpnet"):
+        vision_tower.load_image_processor()
+    elif not vision_tower.is_loaded:
+        vision_tower.load_model()
+    vision_tower.to(device=device, dtype=torch.float16)
+    image_processor = vision_tower.image_processor
+
+    if hasattr(model.config, "max_sequence_length"):
+        context_len = model.config.max_sequence_length
+    else:
+        context_len = 2048
+    
+    return tokenizer, model, image_processor, context_len
 
 
 def inference_MobileVLM(prompt, images, model, tokenizer, image_processor, conv_mode="v1", generation_config=None):
@@ -97,6 +150,156 @@ def inference_MobileVLM(prompt, images, model, tokenizer, image_processor, conv_
     generated_text = outputs.strip()
     
     return generated_text
+
+
+def load_pretrained_MGM(model_path, model_base, model_name, load_8bit=False, load_4bit=False, device_map="auto", device="cuda", use_flash_attn=False, **kwargs):
+    try:
+        from MGM.mgm.model import MGMLlamaForCausalLM, MGMMixtralForCausalLM, MGMGemmaForCausalLM
+    except:
+        print("New model not imported. Try to update Transformers to 4.38.0 or later.")
+    from MGM.mgm.constants import DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+    
+    kwargs = {"device_map": device_map, **kwargs}
+
+    if device != "cuda":
+        kwargs['device_map'] = {"": device}
+
+    if load_8bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
+    elif load_4bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type='nf4'
+        )
+    else:
+        kwargs['torch_dtype'] = torch.float16
+
+    if use_flash_attn:
+        kwargs['attn_implementation'] = 'flash_attention_2'
+    
+    if 'mgm' in model_name.lower():        
+        # Load MGM model
+        if model_base is not None:
+            # this may be mm projector only
+            print('Loading MGM from base model...')
+            
+            if "8x7b" in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_base)
+                model = MGMMixtralForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, **kwargs)
+            elif "2b" in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_base)
+                model = MGMGemmaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, **kwargs)
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
+                model = MGMLlamaForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, **kwargs)
+            mm_projector_weights = torch.load(os.path.join(model_path, 'mm_projector.bin'), map_location='cpu')
+            mm_projector_weights = {k: v.to(torch.float16) for k, v in mm_projector_weights.items()}
+            model.load_state_dict(mm_projector_weights, strict=False)
+        else:
+            if "8x7b" in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path)
+                model = MGMMixtralForCausalLM.from_pretrained(model_path, **kwargs)
+            elif "2b" in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path)
+                model = MGMGemmaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                model = MGMLlamaForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+
+    else:
+        # Load language model
+        if model_base is not None:
+            # PEFT model
+            from peft import PeftModel
+            tokenizer = AutoTokenizer.from_pretrained(model_base, use_fast=False)
+            model = AutoModelForCausalLM.from_pretrained(model_base, low_cpu_mem_usage=True, **kwargs)
+            print(f"Loading LoRA weights from {model_path}")
+            model = PeftModel.from_pretrained(model, model_path)
+            print(f"Merging weights")
+            model = model.merge_and_unload()
+            print('Convert to FP16...')
+            model.to(torch.float16)
+        else:
+            if 'mpt' in model_name.lower():
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+                model = AutoModelForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, trust_remote_code=True, **kwargs)
+            else:
+                tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=False)
+                model = AutoModelForCausalLM.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+
+    image_processor = None
+
+    mm_use_im_start_end = getattr(model.config, "mm_use_im_start_end", False)
+    mm_use_im_patch_token = getattr(model.config, "mm_use_im_patch_token", True)
+    if mm_use_im_patch_token:
+        tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
+    if mm_use_im_start_end:
+        tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
+    
+    model.resize_token_embeddings(len(tokenizer))
+
+    vision_tower = model.get_vision_tower()
+    if not vision_tower.is_loaded:
+        vision_tower.load_model()
+    vision_tower.to(device=device, dtype=torch.float16)
+    image_processor = vision_tower.image_processor
+    
+    if 'mgm' in model_name.lower():
+        vision_tower_aux = model.get_vision_tower_aux()
+        if not vision_tower_aux.is_loaded:
+            vision_tower_aux.load_model()
+        vision_tower_aux.to(device=device, dtype=torch.float16)
+        
+        # initialize attention modules
+        model.config.model_path = model_path
+        model.get_model().initialize_uni_modules(model.config, for_eval=True)
+    
+    if hasattr(model.config, "max_sequence_length"):
+        context_len = model.config.max_sequence_length
+    else:
+        context_len = 2048
+    
+    # workaround for static cache in new transformers version
+    if version.parse(transformers.__version__) >= version.parse("4.38.0"):
+        def new_forward(
+            self,
+            input_ids: torch.LongTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            past_key_values: Optional[List[torch.FloatTensor]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            images: Optional[torch.FloatTensor] = None,
+            images_aux: Optional[torch.FloatTensor] = None,
+            cache_position = None,
+            return_dict: Optional[bool] = None,
+        ):
+            return self.__class__.forward(
+                self,
+                input_ids,
+                attention_mask,
+                position_ids,
+                past_key_values,
+                inputs_embeds,
+                labels,
+                use_cache,
+                output_attentions,
+                output_hidden_states,
+                images,
+                images_aux,
+                return_dict,
+            )
+        
+        model.forward = types.MethodType(new_forward, model)
+    
+    return tokenizer, model, image_processor, context_len
 
 
 def inference_MGM(prompt, images, model, tokenizer, image_processor, conv_mode=None, ocr=False, generation_config=None):
@@ -216,13 +419,20 @@ def inference_MGM(prompt, images, model, tokenizer, image_processor, conv_mode=N
             bos_token_id=tokenizer.bos_token_id,  # Begin of sequence token
             eos_token_id=tokenizer.eos_token_id,  # End of sequence token
             pad_token_id=tokenizer.pad_token_id,  # Pad token
-            use_cache=True)
+            use_cache=True,
+            )
     
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
     generated_text = outputs
     
     return generated_text
 
+
+load_pretrained_func = {
+    "llava": load_pretrained_llava,
+    "MobileVLM": load_pretrained_MobileVLM,
+    "MGM": load_pretrained_MGM,
+}
 
 inference_func = {
     "llava": {"once": None, "batch": inference_llava},
