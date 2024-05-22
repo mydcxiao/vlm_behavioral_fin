@@ -185,11 +185,11 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                 cfg = AutoConfig.from_pretrained(model_id)
                 gen_cfg = GenerationConfig.from_pretrained(model_id)
                 if gen_cfg.max_length == 20:
-                    gen_cfg.max_length = 4096*2
+                    gen_cfg.max_length = 4096
                 gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
             except:
                 cfg = PretrainedConfig(torch_dtype=torch.float16)
-                gen_cfg = GenerationConfig(max_new_tokens=1024, temperature=0)
+                gen_cfg = GenerationConfig(max_new_tokens=512, temperature=0.2)
             batch_inference = False
             if image:
                 load_pretrained_model = load_pretrained_func[model_key]
@@ -227,7 +227,6 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                         conv_mode = "vicuna_v1"
                     # config for MGM
                     ocr = False
-                    # gen_cfg.temperature = 0.2
                     if inference_func['MGM']['batch'] is not None:
                         pipe = partial(inference_func['MGM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
                         batch_inference = True

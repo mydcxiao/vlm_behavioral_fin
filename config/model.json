@@ -17,6 +17,6 @@
         "model_id": "mtgv/MobileVLM_V2-7B"
     },
     "MGM": {
-        "model_id": "YanweiLi/MGM-7B-HD"
+        "model_id": "YanweiLi/MGM-7B"
     }
 }
