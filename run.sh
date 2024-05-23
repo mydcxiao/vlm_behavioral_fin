@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 # export MODEL="llava"
 # export MODEL="MobileVLM"
 export MODEL="MGM"

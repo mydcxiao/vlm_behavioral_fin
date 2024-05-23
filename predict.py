@@ -275,7 +275,7 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
     eps_info = eps_n if args.narrative else eps_s
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart.\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {'going down' if bias else 'going up'}\n"
+    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {'going down' if bias else 'going up'}\n"
     if args.bias_type == 'recency':
         bias_desc = f"The last EPS report with the same EPS surprise as the lastest one has its stock price {'going up' if bias else 'going down'}."
         facts += f"- {bias_desc}"
@@ -366,7 +366,9 @@ def construct_images(file, dir, ticker, start, end):
     quarterly_eps_df['reportedDate'] = pd.to_datetime(quarterly_eps_df['reportedDate'])
     quarterly_eps_df['fiscalDateEnding'] = pd.to_datetime(quarterly_eps_df['fiscalDateEnding'])
     # Creating markers for EPS report date and fiscal end date
-    eps_markers = quarterly_eps_df.loc[quarterly_eps_df['reportedDate'].between(start, end), 'reportedDate'].values
+    quarterly_eps_df['surprise'] = pd.to_numeric(quarterly_eps_df['surprise'])
+    meet_eps_markers = quarterly_eps_df.loc[(quarterly_eps_df['reportedDate'].between(start, end)) & (quarterly_eps_df['surprise'] >= 0), 'reportedDate'].values
+    miss_eps_markers = quarterly_eps_df.loc[(quarterly_eps_df['reportedDate'].between(start, end)) & (quarterly_eps_df['surprise'] < 0), 'reportedDate'].values
     fiscal_markers = quarterly_eps_df.loc[quarterly_eps_df['fiscalDateEnding'].between(start, end), 'fiscalDateEnding'].values
     # Calculate minimum and maximum prices for y-axis scaling
     price_min = comp_stock[['Low']].min().min()  # min of 'Low' prices
@@ -379,12 +381,13 @@ def construct_images(file, dir, ticker, start, end):
     all_dates = pd.date_range(start, end, freq='D')
     low_prices = comp_stock['Low'].reindex(all_dates).interpolate(method='linear')
     high_prices = comp_stock['High'].reindex(all_dates).interpolate(method='linear')
-    eps_signal = high_prices.loc[eps_markers] + offset
+    meet_eps_signal = high_prices.loc[meet_eps_markers] + offset
+    miss_eps_signal = high_prices.loc[miss_eps_markers] + offset
     fiscal_signal = low_prices.loc[fiscal_markers] - offset
     # Setting figure size dynamically based on the date range
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
     fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
-    fig_height = 6  # Keeping height constant
+    fig_height = fig_width * 0.5
     # Plotting the candlestick chart
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
@@ -392,10 +395,9 @@ def construct_images(file, dir, ticker, start, end):
             fig, axlist = mpf.plot(
                 comp_stock, type='candle', mav=(7), style='yahoo', 
                 panel_ratios=(2,1), 
-                # figratio=(2,1), 
                 figratio=(fig_width, fig_height),
                 figscale=1 * min(1, date_range / 120),
-                title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
+                title=f'{ticker} stock price chart with EPS Dates', ylabel='Stock Price', 
                 volume=True, show_nontrading=True, returnfig=True,
                 ylim=(price_min - price_buffer, price_max + price_buffer),
             )
@@ -405,20 +407,21 @@ def construct_images(file, dir, ticker, start, end):
                 panel_ratios=(2,1), 
                 figratio=(fig_width, fig_height),
                 figscale=1 * min(1, date_range / 120),
-                title='Stock Price Chart with EPS Dates', ylabel='Stock Price', 
+                title=f'{ticker} stock price chart with EPS Dates', ylabel='Stock Price', 
                 volume=True, show_nontrading=True, returnfig=True,
                 ylim=(price_min - price_buffer, price_max + price_buffer),
             )       
 
-    eps_x = [mdates.date2num(date) for date in eps_signal.index]
-    # eps_y = [eps_signal[i] if eps_signal[i] < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5 for i in eps_signal.index]
-    eps_y = eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
+    meet_eps_x = [mdates.date2num(date) for date in meet_eps_signal.index]
+    meet_eps_y = meet_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
+    miss_eps_x = [mdates.date2num(date) for date in miss_eps_signal.index]
+    miss_eps_y = miss_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
     fiscal_x = [mdates.date2num(date) for date in fiscal_signal.index]
-    # fiscal_y = [fiscal_signal[i] if fiscal_signal[i] > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5 for i in fiscal_signal.index]
     fiscal_y = fiscal_signal.apply(lambda x: x if x > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5).tolist()
     
-    axlist[0].scatter(eps_x, eps_y, s=50, marker='v', color='orange', label='EPS Reported Date')
-    axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='blue', label='Fiscal End Date')
+    axlist[0].scatter(meet_eps_x, meet_eps_y, s=50, marker='v', color='#00b060', alpha=0.9, label='EPS Meet')
+    axlist[0].scatter(miss_eps_x, miss_eps_y, s=50, marker='v', color='#fe3032', alpha=0.9, label='EPS Miss')
+    axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='#606060', alpha=0.9, label='Fiscal End Date')
     axlist[0].legend(frameon=False)
     
     buf = io.BytesIO()
