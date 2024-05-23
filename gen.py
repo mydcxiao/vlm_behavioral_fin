@@ -12,6 +12,7 @@ import sys
 import os
 import io
 import re
+import random
 import warnings
 import datetime as dt
 import numpy as np
@@ -487,6 +488,9 @@ def main():
         for i in range(len(time_period)):
             bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
     print(f"Finished fetching {len(bias_data)} bias datapoints!")
+    
+    # random select 100 samples for evaluation
+    bias_data = random.sample(bias_data, min(100, len(bias_data)))
     
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
