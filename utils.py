@@ -54,7 +54,15 @@ def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_m
     return processor, model
 
 
-def inference_llava(prompts, images, model, processor):
+def inference_llava_once(prompt, image, model, processor):
+    inputs = processor(prompt, image, return_tensors="pt").to(model.device)
+    output = model.generate(**inputs, max_new_tokens=512)
+    generated_text = processor.batch_decode(output, skip_special_tokens=True)[0]
+    
+    return generated_text
+
+
+def inference_llava_batch(prompts, images, model, processor):
     inputs = processor(prompts, images, return_tensors="pt", padding=True).to(model.device)
     output = model.generate(**inputs, max_new_tokens=512)
     generated_text = processor.batch_decode(output, skip_special_tokens=True)
@@ -109,7 +117,7 @@ def load_pretrained_MobileVLM(model_path, load_8bit=False, load_4bit=False, devi
     return tokenizer, model, image_processor, context_len
 
 
-def inference_MobileVLM(prompt, images, model, tokenizer, image_processor, conv_mode="v1", generation_config=None):
+def inference_MobileVLM_once(prompt, images, model, tokenizer, image_processor, conv_mode="v1", generation_config=None):
     from MobileVLM.mobilevlm.conversation import conv_templates, SeparatorStyle
     from MobileVLM.mobilevlm.utils import disable_torch_init, process_images, tokenizer_image_token, KeywordsStoppingCriteria
     from MobileVLM.mobilevlm.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
@@ -314,7 +322,7 @@ def load_pretrained_MGM(model_path, model_base, model_name, load_8bit=False, loa
     return tokenizer, model, image_processor, context_len
 
 
-def inference_MGM(prompt, images, model, tokenizer, image_processor, conv_mode=None, ocr=False, generation_config=None):
+def inference_MGM_once(prompt, images, model, tokenizer, image_processor, conv_mode=None, ocr=False, generation_config=None):
     from MGM.mgm.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
     from MGM.mgm.conversation import conv_templates
     from MGM.mgm.utils import disable_torch_init
@@ -447,7 +455,7 @@ load_pretrained_func = {
 }
 
 inference_func = {
-    "llava": {"once": None, "batch": inference_llava},
-    "MobileVLM": {"once": inference_MobileVLM, "batch": None},
-    "MGM": {"once": inference_MGM, "batch": None},
+    "llava": {"once": inference_llava_once, "batch": inference_llava_batch},
+    "MobileVLM": {"once": inference_MobileVLM_once, "batch": None},
+    "MGM": {"once": inference_MGM_once, "batch": None},
 }
