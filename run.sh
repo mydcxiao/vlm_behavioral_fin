@@ -1,8 +1,8 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 export MODEL="llava"
 # export MODEL="MobileVLM"
 # export MODEL="MGM"
-export WINDOW_SIZE=16
+export WINDOW_SIZE=20
 export BSZ=4
 export TICKER=""
 export MODEL_CFG="config/model.json"
@@ -18,7 +18,7 @@ python gen.py \
  --prompt_cfg $PROMPT_CFG \
  --bias_type $BIAS_TYPE \
  --image \
-#  --load_4bit \
-#  --batch_inference \
+ --load_4bit \
 #  --load_8bit \
+#  --batch_inference \
 #  --save_image \

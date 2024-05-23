@@ -276,9 +276,9 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
     eps_info = eps_n if args.narrative else eps_s
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {'going down' if bias else 'going up'}\n"
+    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same kind of surprise as the lastest one have their stock price {'going down' if bias else 'going up'} after the report.\n"
     if args.bias_type == 'recency':
-        bias_desc = f"The most recent EPS report with the same EPS surprise as the latest one has its stock price {'going up' if bias else 'going down'}. Note that the outcome of the most recent similar situation usually affect the market sentiment and expectations."
+        bias_desc = f"The most recent EPS report with the same kind of surprise as the latest one has its stock price {'going up' if bias else 'going down'} after the report."
         facts += f"- {bias_desc}"
     elif args.bias_type == 'authoritative':
         index = np.random.choice(len(args.celebrity_cfg))

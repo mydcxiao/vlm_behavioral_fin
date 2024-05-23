@@ -58,6 +58,7 @@ def args_parser():
     parser.add_argument('--bias_type', type=str, default="recency", help='bias type')
     parser.add_argument('--save', action='store_true', default=False, help='save output')
     parser.add_argument('--output_dir', type=str, default="output", help='Output directory')
+    parser.add_argument('--batch_inference', action='store_true', default=False, help='use batch inference')
     
     return parser.parse_args()
 
@@ -161,49 +162,46 @@ class client(object):
             return batched_response
  
             
-def init_model(model_id, model_dict, api=False, token=None, image=False, load_8bit=False, load_4bit=False):
-    if api:
-        if model_id in model_dict:
-            if 'API_URL' in model_dict[model_id]:
-                url = model_dict[model_id]['API_URL']
-                headers = model_dict[model_id]['headers']
-                headers['Authorization'] = f"Bearer {token}"
+def init_model(model_dict, args):
+    if args.api:
+        if args.model in model_dict:
+            if 'API_URL' in model_dict[args.model]:
+                url = model_dict[args.model]['API_URL']
+                headers = model_dict[args.model]['headers']
+                headers['Authorization'] = f"Bearer {args.token}"
                 return client(url=url, headers=headers, openai=False)
             else:
-                raise ValueError(f"'API_URL' not found in model.json for model {model_id}")
-        elif 'gpt' in model_id:
-            model = model_dict[model_id]['model_id']
+                raise ValueError(f"'API_URL' not found in model.json for model {args.model}")
+        elif 'gpt' in args.model:
+            model = model_dict[args.model]['model_id']
             return client(model=model, openai=True)
         else:
-            raise ValueError(f"Model {model_id} not found in model.json")
+            raise ValueError(f"Model {args.model} not found in model.json")
     else:
         try:
-            model_key = model_id
-            model_id = model_dict[model_id]['model_id']
+            model_id = model_dict[args.model]['model_id']
             try:
                 cfg = AutoConfig.from_pretrained(model_id)
                 gen_cfg = GenerationConfig.from_pretrained(model_id)
                 if gen_cfg.max_length == 20:
-                    gen_cfg.max_length = 4096*2
-                gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else \
-                cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
+                    gen_cfg.max_length = 4096
+                gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
             except:
                 cfg = PretrainedConfig(torch_dtype=torch.float16)
                 gen_cfg = GenerationConfig(max_new_tokens=512, temperature=0.2)
-            batch_inference = False
-            if image:
-                load_pretrained_model = load_pretrained_func[model_key]
-                if 'MobileVLM' == model_key:
-                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, load_8bit, load_4bit)
+            if args.image:
+                load_pretrained_model = load_pretrained_func[args.model]
+                if 'MobileVLM' == args.model:
+                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, args.load_8bit, args.load_4bit)
                     conv_mode = "v1"
-                    if inference_func['MobileVLM']['batch'] is not None:
+                    if args.batch_inference:
+                        assert inference_func['MobileVLM']['batch'] is not None, f"batch inference function is not implemented for model {args.model}({model_id})"
                         pipe = partial(inference_func['MobileVLM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, generation_config=gen_cfg)
-                        batch_inference = True
                     elif inference_func['MobileVLM']['once'] is not None:
                         pipe = partial(inference_func['MobileVLM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, generation_config=gen_cfg)
                     else:
-                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
-                elif 'MGM' == model_key:
+                        raise ValueError(f"all inference functions are None for model {args.model}({model_id})")
+                elif 'MGM' == args.model:
                     from huggingface_hub import snapshot_download
                     model_name = get_model_name(model_id)
                     # download clip vision model if not exists
@@ -216,7 +214,7 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                     os.makedirs(local_dir, exist_ok=True)
                     snapshot_download(model_id, local_dir=local_dir)
                     model_id = local_dir
-                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, None, model_name, load_8bit, load_4bit)
+                    tokenizer, model, image_processor, _ = load_pretrained_model(model_id, None, model_name, args.load_8bit, args.load_4bit)
                     if '8x7b' in model_name.lower():
                         conv_mode = "mistral_instruct"
                     elif '34b' in model_name.lower():
@@ -225,30 +223,31 @@ def init_model(model_id, model_dict, api=False, token=None, image=False, load_8b
                         conv_mode = "gemma"
                     else:
                         conv_mode = "vicuna_v1"
+                    # config for MGM
                     ocr = False
-                    if inference_func['MGM']['batch'] is not None:
+                    if args.batch_inference:
+                        assert inference_func['MGM']['batch'] is not None, f"batch inference function is not implemented for model {args.model}({model_id})"
                         pipe = partial(inference_func['MGM']['batch'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
-                        batch_inference = True
                     elif inference_func['MGM']['once'] is not None:
                         pipe = partial(inference_func['MGM']['once'], model=model, tokenizer=tokenizer, image_processor=image_processor, conv_mode=conv_mode, ocr=ocr, generation_config=gen_cfg)
                     else:
-                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
+                        raise ValueError(f"inference function is None for model {args.model}({model_id})")
                 else:
-                    processor, model = load_pretrained_model(model_id, load_4bit=load_4bit, load_8bit=load_8bit)
-                    if inference_func[model_key]['batch'] is not None:
-                        pipe = partial(inference_func[model_key]['batch'], model=model, processor=processor)
-                        batch_inference = True
-                    elif inference_func[model_key]['once'] is not None:
-                        pipe = partial(inference_func[model_key]['once'], model=model, processor=processor)
+                    processor, model = load_pretrained_model(model_id, load_4bit=args.load_4bit, load_8bit=args.load_8bit)
+                    if args.batch_inference:
+                        assert inference_func[args.model]['batch'] is not None, f"batch inference function is not implemented for model {args.model}({model_id})"
+                        pipe = partial(inference_func[args.model]['batch'], model=model, processor=processor)
+                    elif inference_func[args.model]['once'] is not None:
+                        pipe = partial(inference_func[args.model]['once'], model=model, processor=processor)
                     else:
-                        raise ValueError(f"inference function is None for model {model_key}({model_id})")
+                        raise ValueError(f"inference function is None for model {args.model}({model_id})")
             else:
-                if load_4bit:
+                if args.load_4bit:
                     quantization_config = BitsAndBytesConfig( load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
                     pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype, model_kwargs={"quantization_config": quantization_config})
                 else:  
                     pipe = pipeline("text-generation", model=model_id, device_map='auto', torch_dtype=cfg.torch_dtype)
-            return client(pipe=pipe, gen_cfg=gen_cfg, image_input=image, batch_inference=batch_inference)
+            return client(pipe=pipe, gen_cfg=gen_cfg, image_input=args.image, batch_inference=args.batch_inference)
         except Exception as e:
             raise e
   
@@ -275,9 +274,9 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
     eps_info = eps_n if args.narrative else eps_s
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same EPS surprise as the lastest one have their stock price {'going down' if bias else 'going up'}\n"
+    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same kind of surprise as the lastest one have their stock price {'going down' if bias else 'going up'} after the report.\n"
     if args.bias_type == 'recency':
-        bias_desc = f"The last EPS report with the same EPS surprise as the lastest one has its stock price {'going up' if bias else 'going down'}."
+        bias_desc = f"The most recent EPS report with the same kind of surprise as the latest one has its stock price {'going up' if bias else 'going down'} after the report."
         facts += f"- {bias_desc}"
     elif args.bias_type == 'authoritative':
         index = np.random.choice(len(args.celebrity_cfg))
@@ -446,11 +445,10 @@ def parse_answer(response, pattern):
 
 
 def main():
-    set_all_seeds(42)
     args = args_parser()
     prompt_dict, model_dict, celebrity_dict = load_json(args.prompt_cfg, args.model_cfg, args.celebrity_cfg)
+    client = init_model(model_dict, args)
     args.celebrity_cfg = celebrity_dict
-    client = init_model(args.model, model_dict, args.api, args.token, args.image, args.load_8bit, args.load_4bit)
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     bias = 1
@@ -475,4 +473,5 @@ def main():
 
 
 if __name__ == "__main__":
+    set_all_seeds(42)
     main()
