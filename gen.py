@@ -447,6 +447,7 @@ def parse_answer(response, pattern):
  
 
 def main():
+    set_all_seeds(42)
     args = args_parser()
     
     # load config JSON files and init models
@@ -567,5 +568,4 @@ def main():
     
     
 if __name__ == "__main__":
-    set_all_seeds(42)
     main()
