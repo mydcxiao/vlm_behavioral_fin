@@ -49,7 +49,8 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         if quarterly_eps_df.iloc[i]['surprise'] == 'None':
             continue
         
-        surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0      
+        surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0
+        gt_up_or_down = _up_or_down(quarterly_eps_df.iloc[i]['reportedDate'])      
         last_up_or_down = None
         bias_diff = 0
         bias_same = 0
@@ -75,7 +76,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         
         bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
         bias.append(last_up_or_down)
-        gt.append(_up_or_down(quarterly_eps_df.iloc[i]['reportedDate']))
+        gt.append(gt_up_or_down)
     
     return bias_time, bias, gt
 

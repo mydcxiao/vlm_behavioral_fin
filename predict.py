@@ -271,9 +271,7 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     question = "Will the weekly average stock price goes up after the lastest EPS report?"
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
     criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCES."
-    eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
-    eps_info = eps_n if args.narrative else eps_s
     facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same kind of surprise as the lastest one have their stock price {'going down' if bias else 'going up'} after the report.\n"
     if args.bias_type == 'recency':
         bias_desc = f"The most recent EPS report with the same kind of surprise as the latest one has its stock price {'going up' if bias else 'going down'} after the report."
@@ -287,10 +285,15 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
         raise ValueError(f"Unsupported bias type: {args.bias_type}")    
     if args.image:
         stock_info = "Please refer to the input image for stock price information."
+        eps_info = "Please refer to the input image for EPS report information."
+        eps_n = construct_current_eps(args.eps_dir, ticker, start_time, end_time)
+        retrieved_info += f'\nLatest EPS report:\n{eps_n}'
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
     else:
         stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
+        eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
         stock_info = stock_n if args.narrative else stock_s
+        eps_info = eps_n if args.narrative else eps_s
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
     
     return instruction
@@ -303,13 +306,34 @@ def construct_stock_history(file, ticker, start, end):
     comp_stock = comp_stock[['Open', 'Close']]
     comp_stock.columns.name = None
     comp_stock.reset_index(inplace=True)
-    structured_str = comp_stock.to_csv(header=True, index=False)
+    structured_str = comp_stock.to_string(header=True, index=False)
     narrative = '\n'.join([
                 f"On {row.Date}, the stock opened at {row.Open} and closed at {row.Close}."
                 for row in comp_stock.itertuples()
                 ])
     
     return structured_str, narrative
+
+
+def construct_current_eps(dir, ticker, start, end):
+    files = os.listdir(dir)
+    file = None
+    for f in files:
+        if ticker == f.split('.')[0].split('-')[1]:
+            file = f
+            break
+    if not file:
+        raise FileNotFoundError(f"No EPS data found for {ticker}")
+    with open(os.path.join(dir,file), "r") as f:
+        eps_dict = json.load(f)
+    f.close()
+    quarterly_eps = eps_dict['quarterlyEarnings']
+    quarterly_eps_df = pd.DataFrame(quarterly_eps)
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['reportedDate'].between(start, end)]
+    cur = quarterly_eps_df.iloc[0]
+    narrative = f"For the quarter ending on {cur.fiscalDateEnding}, the EPS was {cur.reportedEPS} reported on {cur.reportedDate} and the estimated EPS was {cur.estimatedEPS}. The surprise was {cur.surprise} with a percentage of {cur.surprisePercentage}."
+   
+    return narrative
 
 
 def construct_eps_history(dir, ticker, start, end):
@@ -326,11 +350,10 @@ def construct_eps_history(dir, ticker, start, end):
     f.close()
     quarterly_eps = eps_dict['quarterlyEarnings']
     quarterly_eps_df = pd.DataFrame(quarterly_eps)
-    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
-    quarterly_eps_df = quarterly_eps_df[['reportedDate', 'surprise']]
-    structured_str = quarterly_eps_df.to_csv(header=True, index=False)
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['reportedDate'].between(start, end)]
+    structured_str = quarterly_eps_df.to_string(header=True, index=False)
     narrative = '\n'.join([
-                f"The EPS was reported on {row.reportedDate} and the surprise was {row.surprise}."
+                f"For the quarter ending on {row.fiscalDateEnding}, the EPS was {row.reportedEPS} reported on {row.reportedDate} and the estimated EPS was {row.estimatedEPS}. The surprise was {row.surprise} with a percentage of {row.surprisePercentage}."
                 for row in quarterly_eps_df.itertuples()
                 ])
    
@@ -356,7 +379,7 @@ def construct_images(file, dir, ticker, start, end):
     f.close()
     quarterly_eps = eps_dict['quarterlyEarnings']
     quarterly_eps_df = pd.DataFrame(quarterly_eps)
-    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['fiscalDateEnding'].between(start, end)]
+    quarterly_eps_df = quarterly_eps_df[quarterly_eps_df['reportedDate'].between(start, end)]
 
     comp_stock.loc[:, 'Date'] = pd.to_datetime(comp_stock['Date'])
     comp_stock = comp_stock.infer_objects() # suppress warning
@@ -366,8 +389,13 @@ def construct_images(file, dir, ticker, start, end):
     quarterly_eps_df['fiscalDateEnding'] = pd.to_datetime(quarterly_eps_df['fiscalDateEnding'])
     # Creating markers for EPS report date and fiscal end date
     quarterly_eps_df['surprise'] = pd.to_numeric(quarterly_eps_df['surprise'])
-    meet_eps_markers = quarterly_eps_df.loc[(quarterly_eps_df['reportedDate'].between(start, end)) & (quarterly_eps_df['surprise'] >= 0), 'reportedDate'].values
-    miss_eps_markers = quarterly_eps_df.loc[(quarterly_eps_df['reportedDate'].between(start, end)) & (quarterly_eps_df['surprise'] < 0), 'reportedDate'].values
+    eps_data = quarterly_eps_df.loc[quarterly_eps_df['reportedDate'].between(start, end), ['reportedDate', 'surprise']]
+    meet_eps_data = eps_data.loc[eps_data['surprise'] >= 0]
+    meet_eps_markers = meet_eps_data['reportedDate'].values
+    meet_eps_surprise = meet_eps_data['surprise'].values
+    miss_eps_data = eps_data.loc[eps_data['surprise'] < 0]
+    miss_eps_markers = miss_eps_data['reportedDate'].values
+    miss_eps_surprise = miss_eps_data['surprise'].values
     fiscal_markers = quarterly_eps_df.loc[quarterly_eps_df['fiscalDateEnding'].between(start, end), 'fiscalDateEnding'].values
     # Calculate minimum and maximum prices for y-axis scaling
     price_min = comp_stock[['Low']].min().min()  # min of 'Low' prices
@@ -386,7 +414,7 @@ def construct_images(file, dir, ticker, start, end):
     # Setting figure size dynamically based on the date range
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
     fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
-    fig_height = 6
+    fig_height = 8
     # Plotting the candlestick chart
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
@@ -412,19 +440,28 @@ def construct_images(file, dir, ticker, start, end):
             )       
 
     meet_eps_x = [mdates.date2num(date) for date in meet_eps_signal.index]
-    meet_eps_y = meet_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
+    meet_eps_y = meet_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.25 else price_max + price_buffer * 0.25).tolist()
     miss_eps_x = [mdates.date2num(date) for date in miss_eps_signal.index]
-    miss_eps_y = miss_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.5 else price_max + price_buffer * 0.5).tolist()
+    miss_eps_y = miss_eps_signal.apply(lambda x: x if x < price_max + price_buffer * 0.25 else price_max + price_buffer * 0.25).tolist()
     fiscal_x = [mdates.date2num(date) for date in fiscal_signal.index]
-    fiscal_y = fiscal_signal.apply(lambda x: x if x > price_min - price_buffer * 0.5 else price_min - price_buffer * 0.5).tolist()
+    fiscal_y = fiscal_signal.apply(lambda x: x if x > price_min - price_buffer * 0.25 else price_min - price_buffer * 0.25).tolist()
     
     axlist[0].scatter(meet_eps_x, meet_eps_y, s=50, marker='v', color='#00b060', alpha=0.9, label='EPS Meet')
     axlist[0].scatter(miss_eps_x, miss_eps_y, s=50, marker='v', color='#fe3032', alpha=0.9, label='EPS Miss')
     axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='#606060', alpha=0.9, label='Fiscal End Date')
+    
+    text_offset = 5  # Offset for text positioning
+    for x, y, date, surprise in zip(meet_eps_x, meet_eps_y, meet_eps_markers, meet_eps_surprise):
+        axlist[0].text(x, y + text_offset, np.datetime_as_string(date, unit='D')+f'\nSurprise: {surprise:.2f}', fontsize=6, fontweight='bold', ha='center', va='bottom')
+    for x, y, date, surprise in zip(miss_eps_x, miss_eps_y, miss_eps_markers, miss_eps_surprise):
+        axlist[0].text(x, y + text_offset, np.datetime_as_string(date, unit='D')+f'\nSurprise: {surprise:.2f}', fontsize=6, fontweight='bold', ha='center', va='bottom')
+    for x, y, date in zip(fiscal_x, fiscal_y, fiscal_markers):
+        axlist[0].text(x, y - text_offset, np.datetime_as_string(date, unit='D'), fontsize=6, fontweight='bold', ha='center', va='top')
+        
     axlist[0].legend(frameon=False)
     
     buf = io.BytesIO()
-    fig.savefig(buf, format='png')
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=300)
     buf.seek(0)  # Important: move the buffer's start to the beginning after saving
     plt.close()
     
@@ -459,6 +496,7 @@ def main():
     message = construct_message(args.model, prompt_dict, instruction)
     image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
     image = Image.open(image_buf) if args.image else None
+    print('Message:', message)
     response = client.query([message], [image])[0]
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
     print('Raw Answer:', response)
@@ -466,7 +504,7 @@ def main():
     response = construct_assistant_message(response, split)
     if args.save:
         os.makedirs(args.output_dir, exist_ok=True)
-        json.dump(response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
+        json.dump(message + response, open(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.json", "w"))
         image.save(f"{args.output_dir}/{args.model}_{args.ticker}_{args.start_time}_{args.end_time}.png")
     image_buf.close() if args.image else None
     pattern = re.compile(r"(?:\{)?(\d+\.\d*|\d+|\.\d+)(?:\})?")

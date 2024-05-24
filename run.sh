@@ -1,7 +1,7 @@
 export CUDA_VISIBLE_DEVICES=0
-export MODEL="llava"
+# export MODEL="llava"
 # export MODEL="MobileVLM"
-# export MODEL="MGM"
+export MODEL="MGM"
 export BSZ=4
 export TICKER=""
 export MODEL_CFG="config/model.json"
