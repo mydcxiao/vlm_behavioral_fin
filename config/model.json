@@ -18,5 +18,11 @@
     },
     "MGM": {
         "model_id": "YanweiLi/MGM-7B"
+    },
+    "MiniCPM": {
+        "model_id": "openbmb/MiniCPM-Llama3-V-2_5"
+    },
+    "Phi-3-V": {
+        "model_id": "microsoft/Phi-3-vision-128k-instruct"
     }
 }

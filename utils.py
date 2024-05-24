@@ -448,14 +448,101 @@ def inference_MGM_once(prompt, images, model, tokenizer, image_processor, conv_m
     return generated_text
 
 
+def load_pretrained_MiniCPM(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
+    from transformers import AutoModel, AutoTokenizer
+    
+    kwargs = {}
+
+    if load_8bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
+    elif load_4bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type='nf4'
+        )
+    else:
+        kwargs['torch_dtype'] = torch.float16
+
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    model = AutoModel.from_pretrained(model_path, trust_remote_code=True, **kwargs)
+    model = model.to(device=device)
+    model.eval()
+    
+    return tokenizer, model
+
+
+def inference_MiniCPM_once(prompt, image, model, tokenizer, generation_config=None):
+    msgs = [{'role': 'user', 'content': prompt}]
+    generated_text = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.7)
+    
+    return generated_text
+
+
+def load_pretrained_phi3V(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
+    from transformers import AutoModelForCausalLM, AutoProcessor
+    
+    kwargs = {'device_map': device_map}
+
+    if load_8bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_8bit=True,
+        )
+    elif load_4bit:
+        kwargs['quantization_config'] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type='nf4'
+        )
+    else:
+        kwargs['torch_dtype'] = torch.float16
+    
+    processor = AutoProcessor.from_pretrained(model_path, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True, **kwargs)
+    
+    return processor, model
+
+
+def inference_phi3V_once(prompt, image, model, processor, generation_config=None):
+    if generation_config is None:
+        generation_args = { 
+            "max_new_tokens": 500, 
+            "temperature": 0.0, 
+            "do_sample": False, 
+        } 
+    else:
+        generation_args = {
+            "max_new_tokens": generation_config.max_new_tokens if hasattr(generation_config, "max_new_tokens") else 512,
+            "temperature": generation_config.temperature if hasattr(generation_config, "temperature") else 0.0,
+            "do_sample": generation_config.do_sample if hasattr(generation_config, "do_sample") else False,
+        }
+
+    messages = [{'role': 'user', 'content': prompt}]
+    messages = processor.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    inputs = processor(messages, [image], return_tensors="pt").to(model.device)
+    generate_ids = model.generate(**inputs, eos_token_id=processor.tokenizer.eos_token_id, **generation_args)
+    generate_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
+    generated_text = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0] 
+    
+    return generated_text
+    
+
 load_pretrained_func = {
     "llava": load_pretrained_llava,
     "MobileVLM": load_pretrained_MobileVLM,
     "MGM": load_pretrained_MGM,
+    "MiniCPM": load_pretrained_MiniCPM,
+    "Phi-3-V": load_pretrained_phi3V,
 }
 
 inference_func = {
     "llava": {"once": inference_llava_once, "batch": inference_llava_batch},
     "MobileVLM": {"once": inference_MobileVLM_once, "batch": None},
     "MGM": {"once": inference_MGM_once, "batch": None},
+    "MiniCPM": {"once": inference_MiniCPM_once, "batch": None},
+    "Phi-3-V": {"once": inference_phi3V_once, "batch": None},
 }

@@ -1,13 +1,13 @@
 export CUDA_VISIBLE_DEVICES=0
-# export MODEL="llava"
-export MODEL="MobileVLM"
-# export MODEL="MGM"
 export BSZ=4
 export TICKER=""
 export MODEL_CFG="config/model.json"
 export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="recency"
 # export WINDOW_SIZE=5
+
+MODELS=("llava" "MobileVLM" "MGM")
+export MODEL=${MODELS[2]}
 
 WINDOW_SIZES=(4 8 12 16 20)
 
@@ -22,7 +22,7 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --bias_type $BIAS_TYPE \
      --image \
      --load_4bit \
-     --save_image \
+    #  --save_image \
     #  --load_8bit \
     #  --batch_inference \
 done
