@@ -403,7 +403,7 @@ def construct_images(file, dir, ticker, start, end):
     price_range = price_max - price_min
     price_buffer = price_range * 0.1  # 10% price buffer on each side
     # Calculate adaptive offsets for markers
-    offset = price_range * 0.25  # 25% of the price range
+    offset = price_range * 0.15
     # Creating EPS signals
     all_dates = pd.date_range(start, end, freq='D')
     low_prices = comp_stock['Low'].reindex(all_dates).interpolate(method='linear')
@@ -414,7 +414,7 @@ def construct_images(file, dir, ticker, start, end):
     # Setting figure size dynamically based on the date range
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
     fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
-    fig_height = 8
+    fig_height = 6
     # Plotting the candlestick chart
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
@@ -450,7 +450,7 @@ def construct_images(file, dir, ticker, start, end):
     axlist[0].scatter(miss_eps_x, miss_eps_y, s=50, marker='v', color='#fe3032', alpha=0.9, label='EPS Miss')
     axlist[0].scatter(fiscal_x, fiscal_y, s=50, marker='^', color='#606060', alpha=0.9, label='Fiscal End Date')
     
-    text_offset = 5  # Offset for text positioning
+    text_offset = price_buffer * 0.25  # Offset for text positioning
     for x, y, date, surprise in zip(meet_eps_x, meet_eps_y, meet_eps_markers, meet_eps_surprise):
         axlist[0].text(x, y + text_offset, np.datetime_as_string(date, unit='D')+f'\nSurprise: {surprise:.2f}', fontsize=6, fontweight='bold', ha='center', va='bottom')
     for x, y, date, surprise in zip(miss_eps_x, miss_eps_y, miss_eps_markers, miss_eps_surprise):
