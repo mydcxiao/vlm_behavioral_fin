@@ -495,7 +495,7 @@ def main():
     instruction = construct_instruction(args, args.ticker, args.start_time, args.end_time, bias)
     message = construct_message(args.model, prompt_dict, instruction)
     image_buf = construct_images(args.stock_file, args.eps_dir, args.ticker, args.start_time, args.end_time) if args.image else None
-    image = Image.open(image_buf) if args.image else None
+    image = Image.open(image_buf).convert('RGB') if args.image else None
     print('Message:', message)
     response = client.query([message], [image])[0]
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None

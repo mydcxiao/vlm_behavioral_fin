@@ -6,8 +6,8 @@ export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="recency"
 # export WINDOW_SIZE=5
 
-MODELS=("llava" "MobileVLM" "MGM")
-export MODEL=${MODELS[2]}
+MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V")
+export MODEL=${MODELS[4]}
 
 WINDOW_SIZES=(4 8 12 16 20)
 

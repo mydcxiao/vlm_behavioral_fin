@@ -451,33 +451,34 @@ def inference_MGM_once(prompt, images, model, tokenizer, image_processor, conv_m
 def load_pretrained_MiniCPM(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
     from transformers import AutoModel, AutoTokenizer
     
-    kwargs = {}
+    kwargs = {'device_map': device_map}
 
     if load_8bit:
         kwargs['quantization_config'] = BitsAndBytesConfig(
             load_in_8bit=True,
+            llm_int8_skip_modules=['out_proj', 'kv_proj', 'lm_head'],
         )
     elif load_4bit:
         kwargs['quantization_config'] = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_compute_dtype=torch.float16,
             bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type='nf4'
+            bnb_4bit_quant_type='nf4',
+            llm_int8_skip_modules=['out_proj', 'kv_proj', 'lm_head'],
         )
     else:
         kwargs['torch_dtype'] = torch.float16
 
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True, **kwargs)
-    model = model.to(device=device)
     model.eval()
     
     return tokenizer, model
 
 
-def inference_MiniCPM_once(prompt, image, model, tokenizer, generation_config=None):
+def inference_MiniCPM_once(prompt, image, model, processor, generation_config=None):
     msgs = [{'role': 'user', 'content': prompt}]
-    generated_text = model.chat(image=image, msgs=msgs, tokenizer=tokenizer, sampling=True, temperature=0.7)
+    generated_text = model.chat(image=image, msgs=msgs, tokenizer=processor, sampling=True, temperature=0.7)
     
     return generated_text
 
