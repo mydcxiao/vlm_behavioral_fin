@@ -11,7 +11,7 @@
         "model_id": "gpt-4-turbo"
     },
     "llava": {
-        "model_id": "llava-hf/llava-1.5-7b-hf"
+        "model_id": "llava-hf/llava-v1.6-mistral-7b-hf"
     },
     "MobileVLM": {
         "model_id": "mtgv/MobileVLM_V2-7B"

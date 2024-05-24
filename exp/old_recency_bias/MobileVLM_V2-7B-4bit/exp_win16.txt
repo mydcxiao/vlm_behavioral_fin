@@ -1,9 +1,0 @@
-total: 7698
-correct: 3464
-accuracy: 0.44998700961288646
-wrong: 4234
-wrong by bias: 2324
-bias percentage: 0.30189659651857625
-wrong by bias percentage: 0.5488899385923477
-no answer: 346
-no answer percentage: 0.0449467394128345

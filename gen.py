@@ -388,7 +388,7 @@ def construct_images(file, dir, ticker, start, end):
     # Setting figure size dynamically based on the date range
     date_range = (dt.datetime.strptime(end, '%Y-%m-%d') - dt.datetime.strptime(start, '%Y-%m-%d')).days
     fig_width = max(10, min(date_range / 30, 30)) # 30 days per inch
-    fig_height = fig_width * 0.5
+    fig_height = 6
     # Plotting the candlestick chart
     with warnings.catch_warnings():
         warnings.simplefilter("error", UserWarning)
@@ -436,14 +436,16 @@ def construct_images(file, dir, ticker, start, end):
 def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
-    try:
-        for part in parts[::-1][:3]:
+    for part in parts[::-1][:3]:
+        try:
             number = float(part)
-            if 0 <= number <= 1:
-                return 1 if number >= 0.5 else 0
-        return None
-    except:
-        return None
+        except:
+            continue
+        if 0 <= number <= 1:
+            return 1 if number >= 0.5 else 0
+        if 0 <= number <= 100:
+            return 1 if number >= 50 else 0
+    return None
  
 
 def main():

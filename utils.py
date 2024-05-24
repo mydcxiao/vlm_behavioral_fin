@@ -30,7 +30,7 @@ def get_model_name(model_path):
     
 
 def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_map="auto", device="cuda"):
-    from transformers import AutoProcessor, LlavaForConditionalGeneration
+    from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
     
     kwargs = {"device_map": device_map}
 
@@ -48,8 +48,8 @@ def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_m
     else:
         kwargs['torch_dtype'] = torch.float16
 
-    processor = AutoProcessor.from_pretrained(model_path)
-    model = LlavaForConditionalGeneration.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
+    processor = LlavaNextProcessor.from_pretrained(model_path)
+    model = LlavaNextForConditionalGeneration.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
     
     return processor, model
 
