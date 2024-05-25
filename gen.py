@@ -483,8 +483,6 @@ def parse_answer(response, pattern):
             continue
         if 0 <= number <= 1:
             return 1 if number >= 0.5 else 0
-        if 0 <= number <= 100:
-            return 1 if number >= 50 else 0
     return None
  
 

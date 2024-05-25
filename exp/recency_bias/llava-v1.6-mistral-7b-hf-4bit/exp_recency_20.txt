@@ -1,0 +1,13 @@
+Model: llava
+Bias: recency
+Window Size: 20
+
+total: 100
+correct: 53
+accuracy: 0.53
+wrong: 47
+wrong by bias: 9
+bias percentage: 0.09
+wrong by bias percentage: 0.19148936170212766
+no answer: 0
+no answer percentage: 0.0
