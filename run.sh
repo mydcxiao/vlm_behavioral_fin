@@ -4,12 +4,18 @@ export TICKER=""
 export MODEL_CFG="config/model.json"
 export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="recency"
+export NUM_SAMPLES=200
 # export WINDOW_SIZE=5
 
+export CUR_ID=1
 MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V")
-export MODEL=${MODELS[4]}
+MAX_NEW_TOKENS=(512 512 512 512 512)
+TEMPERATURES=(0.0 0.0 0.2 0.7 0.0)
+export MODEL=${MODELS[$CUR_ID]}
+export MAX_NEW_TOKEN=${MAX_NEW_TOKENS[$CUR_ID]}
+export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
 
-WINDOW_SIZES=(4 8 12 16 20)
+WINDOW_SIZES=(4 6 8 10 12)
 
 for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
     python gen.py \
@@ -20,6 +26,9 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --model_cfg $MODEL_CFG \
      --prompt_cfg $PROMPT_CFG \
      --bias_type $BIAS_TYPE \
+     --max_new_tokens $MAX_NEW_TOKEN \
+     --temperature $TEMPERATURE \
+     --num_samples $NUM_SAMPLES \
      --image \
      --load_4bit \
     #  --save_image \

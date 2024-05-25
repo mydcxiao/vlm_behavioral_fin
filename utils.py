@@ -511,7 +511,7 @@ def load_pretrained_phi3V(model_path, load_8bit=False, load_4bit=False, device_m
 def inference_phi3V_once(prompt, image, model, processor, generation_config=None):
     if generation_config is None:
         generation_args = { 
-            "max_new_tokens": 500, 
+            "max_new_tokens": 512, 
             "temperature": 0.0, 
             "do_sample": False, 
         } 

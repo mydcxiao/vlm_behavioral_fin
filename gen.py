@@ -60,6 +60,9 @@ def args_parser():
     parser.add_argument('--window_size', type=int, default=5, help='window size for bias detection')
     parser.add_argument('--save_image', action='store_true', default=False, help='save image or not')
     parser.add_argument('--batch_inference', action='store_true', default=False, help='use batch inference')
+    parser.add_argument('--max_new_tokens', type=int, default=512, help='max new tokens for generation')
+    parser.add_argument('--temperature', type=float, default=0.0, help='temperature for generation')
+    parser.add_argument('--num_samples', type=int, default=100, help='number of samples to test')
     
     return parser.parse_args()
 
@@ -190,7 +193,7 @@ def init_model(model_dict, args):
                 gen_cfg.pad_token_id = gen_cfg.pad_token_id if hasattr(gen_cfg, "pad_token_id") and gen_cfg.pad_token_id else cfg.pad_token_id if cfg and hasattr(cfg, "pad_token_id") and cfg.pad_token_id else 0
             except:
                 cfg = PretrainedConfig(torch_dtype=torch.float16)
-                gen_cfg = GenerationConfig(max_new_tokens=512, temperature=0.2)
+                gen_cfg = GenerationConfig(max_new_tokens=args.max_new_tokens, temperature=args.temperature)
             if args.image:
                 load_pretrained_model = load_pretrained_func[args.model]
                 if 'MobileVLM' == args.model:
@@ -270,13 +273,13 @@ def construct_assistant_message(response, split):
 
 
 def construct_instruction(args, ticker, start_time, end_time, bias):
-    question = "Will the weekly average stock price goes up after the latest EPS report?"
+    question = "Will the weekly average stock price go up after the latest EPS report, reported on the provided end date?"
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (EPS Meet) typically boosts the stock price, while a negative surprise (EPS Miss) usually causes the stock price to fall."
-    criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCES."
+    criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCE."
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same kind of surprise as the lastest one have their stock price {'going down' if bias else 'going up'} after the report.\n"
+    facts = f"- Fiscal end date and EPS report date are marked on the image. Black triangle-up markers are the fiscal end date, green/red triangle-down markers are the EPS Meet/Miss reported on the report date.\n- Over 80% of past instances with the same EPS outcome (Meet/Miss) as the latest report have seen the stock price  {'going down' if bias else 'going up'} after the report.\n"
     if args.bias_type == 'recency':
-        bias_desc = f"The most recent EPS report with the same kind of surprise as the latest one has its stock price {'going up' if bias else 'going down'} after the report. Note that the outcome of the most recent similar situation might affect the market sentiment and stock price."
+        bias_desc = f"The most recent past EPS report, which had the same outcome (EPS Meet/Miss) as the latest one, saw the stock price {'going up' if bias else 'going down'} after the report. Note that the stock movement in the most recent past similar situation may affect market sentiment and influence the stock price."
         facts += f"- {bias_desc}"
     elif args.bias_type == 'authoritative':
         index = np.random.choice(len(args.celebrity_cfg))
@@ -286,8 +289,8 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     else:
         raise ValueError(f"Unsupported bias type: {args.bias_type}")
     if args.image:
-        stock_info = "Please refer to the input image for stock price information."
-        eps_info = "Please refer to the input image for EPS report information."
+        stock_info = "Please refer to the input image."
+        eps_info = "Please refer to the input image."
         eps_n = construct_current_eps(args.eps_dir, ticker, start_time, end_time)
         retrieved_info += f'\nLatest EPS report:\n{eps_n}'
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
@@ -473,7 +476,7 @@ def construct_images(file, dir, ticker, start, end):
 def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
-    for part in parts[::-1][:3]:
+    for part in parts[::-1][:2]:
         try:
             number = float(part)
         except:
@@ -486,8 +489,8 @@ def parse_answer(response, pattern):
  
 
 def main():
-    set_all_seeds(42)
     args = args_parser()
+    set_all_seeds(42)
     
     # load config JSON files and init models
     prompt_dict, model_dict, celebrity_dict = load_json(args.prompt_cfg, args.model_cfg, args.celebrity_cfg)
@@ -529,7 +532,7 @@ def main():
     print(f"Finished fetching {len(bias_data)} bias datapoints!")
     
     # random select 100 samples for evaluation
-    bias_data = random.sample(bias_data, min(100, len(bias_data)))
+    bias_data = random.sample(bias_data, min(args.num_samples, len(bias_data)))
     
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)
