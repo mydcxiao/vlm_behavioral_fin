@@ -122,7 +122,9 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
         
         surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0      
         gt_up_or_down = _up_or_down(quarterly_eps_df.iloc[i]['reportedDate'])
-        surprise_trend_diff = False
+        majority_up_or_down = None
+        majority_same = 0
+        majority_diff = 0
         surprise_same = 0
         no_surprise_report = False
         for j in range(i+1, i+window):
@@ -132,14 +134,18 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
             
             if (float(quarterly_eps_df.iloc[j]['surprise']) >= 0) == surprise:
                 surprise_same += 1
-                if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != gt_up_or_down:
-                    surprise_trend_diff = True
+                if majority_up_or_down is None:
+                    majority_up_or_down = _up_or_down(quarterly_eps_df.iloc[j]['reportedDate'])
+                if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != majority_up_or_down:
+                    majority_diff += 1
+                else:
+                    majority_same += 1
                     
-        if surprise_trend_diff or surprise_same / (window - 1) < 0.5 or no_surprise_report:
+        if surprise_same / (window - 1) < 0.5 or majority_same / (majority_same + majority_diff) < 0.8 or no_surprise_report:
             continue
         
         bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
-        bias.append(1 ^ gt_up_or_down)
+        bias.append(1 ^ majority_up_or_down)
         gt.append(gt_up_or_down)
     
     return bias_time, bias, gt

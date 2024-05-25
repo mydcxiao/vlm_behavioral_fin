@@ -49,7 +49,7 @@ def load_pretrained_llava(model_path, load_8bit=False, load_4bit=False, device_m
         kwargs['torch_dtype'] = torch.float16
 
     processor = LlavaNextProcessor.from_pretrained(model_path)
-    model = LlavaNextForConditionalGeneration.from_pretrained(model_path, low_cpu_mem_usage=True, use_flash_attention_2=True, **kwargs)
+    model = LlavaNextForConditionalGeneration.from_pretrained(model_path, low_cpu_mem_usage=True, **kwargs)
     
     return processor, model
 
