@@ -1,0 +1,13 @@
+Model: MGM
+Bias: recency
+Window Size: 14
+
+total: 100
+correct: 55
+accuracy: 0.55
+wrong: 45
+wrong by bias: 14
+bias percentage: 0.14
+wrong by bias percentage: 0.3111111111111111
+no answer: 3
+no answer percentage: 0.03

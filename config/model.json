@@ -17,7 +17,7 @@
         "model_id": "mtgv/MobileVLM_V2-7B"
     },
     "MGM": {
-        "model_id": "YanweiLi/MGM-7B"
+        "model_id": "YanweiLi/MGM-7B-HD"
     },
     "MiniCPM": {
         "model_id": "openbmb/MiniCPM-Llama3-V-2_5"

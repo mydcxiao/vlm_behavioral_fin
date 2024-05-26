@@ -74,7 +74,11 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
         if bias_same == 0 or bias_diff / (bias_diff + bias_same) < threshold or no_surprise_report:
             continue
         
-        bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
+        cur_time = ((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d'))
+        if comp_stock.loc[cur_time[0]:cur_time[1], ['Low', 'High']].isna().any().any():
+            continue
+        
+        bias_time.append(cur_time)
         bias.append(last_up_or_down)
         gt.append(gt_up_or_down)
     
@@ -122,10 +126,8 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
         
         surprise = float(quarterly_eps_df.iloc[i]['surprise']) >= 0      
         gt_up_or_down = _up_or_down(quarterly_eps_df.iloc[i]['reportedDate'])
-        majority_up_or_down = None
-        majority_same = 0
-        majority_diff = 0
-        surprise_same = 0
+        up_count = 0
+        down_count = 0
         no_surprise_report = False
         for j in range(i+1, i+window):
             if quarterly_eps_df.iloc[j]['surprise'] == 'None':
@@ -133,20 +135,28 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
                 break
             
             if (float(quarterly_eps_df.iloc[j]['surprise']) >= 0) == surprise:
-                surprise_same += 1
-                if majority_up_or_down is None:
-                    majority_up_or_down = _up_or_down(quarterly_eps_df.iloc[j]['reportedDate'])
-                    majority_same += 1
+                if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']):
+                    up_count += 1
                 else:
-                    if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != majority_up_or_down:
-                        majority_diff += 1
-                    else:
-                        majority_same += 1
-                    
-        if surprise_same / (window - 1) < 0.5 or majority_same / (majority_same + majority_diff) < 0.8 or no_surprise_report:
+                    down_count += 1
+        
+        if up_count == down_count:
+            continue
+        elif up_count > down_count:
+            majority_count = up_count
+            majority_up_or_down = 1
+        else:
+            majority_count = down_count
+            majority_up_or_down = 0
+        
+        if (up_count + down_count) / (window - 1) < min(0.8, (window-2)/(window-1)) or majority_count / (up_count + down_count) < 0.8 or no_surprise_report:
             continue
         
-        bias_time.append(((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d')))
+        cur_time = ((quarterly_eps_df.iloc[i+window-1]['reportedDate']-pd.Timedelta(days=30)).strftime('%Y-%m-%d'), quarterly_eps_df.iloc[i]['reportedDate'].strftime('%Y-%m-%d'))
+        if comp_stock.loc[cur_time[0]:cur_time[1], ['Low', 'High']].isna().any().any():
+            continue
+        
+        bias_time.append(cur_time)
         bias.append(1 ^ majority_up_or_down)
         gt.append(gt_up_or_down)
     

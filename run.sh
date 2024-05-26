@@ -1,14 +1,14 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 export BSZ=4
 export TICKER=""
 export MODEL_CFG="config/model.json"
 export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="authoritative"
 export NUM_SAMPLES=100
-export SEED=42
+export SEED=0
 # export WINDOW_SIZE=5
 
-export CUR_ID=3
+export CUR_ID=0
 MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V")
 MAX_NEW_TOKENS=(512 512 512 512 512)
 TEMPERATURES=(0.0 0.0 0.2 0.7 0.0)
@@ -16,7 +16,7 @@ export MODEL=${MODELS[$CUR_ID]}
 export MAX_NEW_TOKEN=${MAX_NEW_TOKENS[$CUR_ID]}
 export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
 
-WINDOW_SIZES=(4 6 8 10 12 14 16 18 20)
+WINDOW_SIZES=(4 8 12 16 20)
 
 for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
     python gen.py \

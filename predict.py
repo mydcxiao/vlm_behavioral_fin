@@ -268,13 +268,15 @@ def construct_assistant_message(response, split):
 
 
 def construct_instruction(args, ticker, start_time, end_time, bias):
-    question = "Will the weekly average stock price goes up after the lastest EPS report?"
-    background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. It's calculated as the company's net income divided by the number of outstanding shares. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (actual EPS higher than expected) typically boosts the stock price, while a negative surprise (actual EPS lower than expected) usually causes the stock price to fall."
-    criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCES."
+    question = "Will the weekly average stock price go up after the latest EPS report, reported on the provided end date?"
+    background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (EPS Meet) typically boosts the stock price, while a negative surprise (EPS Miss) usually causes the stock price to fall."
+    criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCE."
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
-    facts = f"- The fiscal end date and EPS reported date are marked on the stock price chart. Black mark is the fiscal end date, green mark is the EPS Meet (positive surprise) and red mark is the EPS Miss (negative surprise).\n- In the provided history, above 80 percent of the EPS reports with the same kind of surprise as the lastest one have their stock price {'going down' if bias else 'going up'} after the report.\n"
+    facts = f"- Fiscal end date and EPS report date are marked on the image. Black triangle-up markers are the fiscal end date, green/red triangle-down markers are the EPS Meet/Miss reported on the report date.\n- Over 80% of past instances with the same EPS outcome (Meet/Miss) as the latest report have seen the stock price {'going down' if bias else 'going up'} after the report.\n"
+    # retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}"
+    # facts = ""
     if args.bias_type == 'recency':
-        bias_desc = f"The most recent EPS report with the same kind of surprise as the latest one has its stock price {'going up' if bias else 'going down'} after the report."
+        bias_desc = f"The most recent past EPS report, which had the same outcome (EPS Meet/Miss) as the latest one, saw the stock price {'going up' if bias else 'going down'} after the report. Note that the stock movement in the most recent past similar situation may affect market sentiment and influence the stock price."
         facts += f"- {bias_desc}"
     elif args.bias_type == 'authoritative':
         index = np.random.choice(len(args.celebrity_cfg))
@@ -282,19 +284,21 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
         bias_desc = f"\n\nSome statements:\nMarket Mover: {args.celebrity_cfg[index]['summary']}\nMarket Impact: {args.celebrity_cfg[index]['impact']}\nMarket-moving Remarks: {args.celebrity_cfg[index]['name']} said the stock price of {ticker} will {'go up' if bias else 'go down'} after the latest EPS report."
         facts += bias_desc
     else:
-        raise ValueError(f"Unsupported bias type: {args.bias_type}")    
+        raise ValueError(f"Unsupported bias type: {args.bias_type}")
     if args.image:
-        stock_info = "Please refer to the input image for stock price information."
-        eps_info = "Please refer to the input image for EPS report information."
+        stock_info = "Please refer to the input image."
+        eps_info = "Please refer to the input image."
         eps_n = construct_current_eps(args.eps_dir, ticker, start_time, end_time)
-        retrieved_info += f'\nLatest EPS report:\n{eps_n}'
+        retrieved_info += f'\n\nLatest EPS report:\n{eps_n}'
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
+        # instruction = [question, background, criterion, retrieved_info.format(stock_info, eps_info, facts)]
     else:
         stock_s, stock_n = construct_stock_history(args.stock_file, ticker, start_time, end_time)
         eps_s, eps_n = construct_eps_history(args.eps_dir, ticker, start_time, end_time)
         stock_info = stock_n if args.narrative else stock_s
         eps_info = eps_n if args.narrative else eps_s
         instruction = [question, background, criterion, start_time, end_time, retrieved_info.format(stock_info, eps_info, facts)]
+        # instruction = [question, background, criterion, retrieved_info.format(stock_info, eps_info, facts)]
     
     return instruction
 
@@ -484,7 +488,7 @@ def parse_answer(response, pattern):
 
 
 def main():
-    set_all_seeds(42)
+    # set_all_seeds(42)
     args = args_parser()
     prompt_dict, model_dict, celebrity_dict = load_json(args.prompt_cfg, args.model_cfg, args.celebrity_cfg)
     client = init_model(model_dict, args)
@@ -499,7 +503,7 @@ def main():
     print('Message:', message)
     response = client.query([message], [image])[0]
     split = prompt_dict[args.model]['split'] if 'split' in prompt_dict[args.model] else None
-    print('Raw Answer:', response)
+    # print('Raw Answer:', response)
     sys.stdout.flush()
     response = construct_assistant_message(response, split)
     if args.save:
