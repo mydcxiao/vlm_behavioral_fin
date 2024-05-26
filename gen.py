@@ -63,6 +63,7 @@ def args_parser():
     parser.add_argument('--max_new_tokens', type=int, default=512, help='max new tokens for generation')
     parser.add_argument('--temperature', type=float, default=0.0, help='temperature for generation')
     parser.add_argument('--num_samples', type=int, default=100, help='number of samples to test')
+    parser.add_argument('--seed', type=int, default=42, help='random seed')
     
     return parser.parse_args()
 
@@ -488,7 +489,7 @@ def parse_answer(response, pattern):
 
 def main():
     args = args_parser()
-    set_all_seeds(42)
+    set_all_seeds(args.seed)
     
     # load config JSON files and init models
     prompt_dict, model_dict, celebrity_dict = load_json(args.prompt_cfg, args.model_cfg, args.celebrity_cfg)

@@ -1,0 +1,13 @@
+Model: MobileVLM
+Bias: recency
+Window Size: 6
+
+total: 100
+correct: 59
+accuracy: 0.59
+wrong: 41
+wrong by bias: 13
+bias percentage: 0.13
+wrong by bias percentage: 0.3170731707317073
+no answer: 4
+no answer percentage: 0.04

@@ -1,0 +1,13 @@
+Model: MiniCPM
+Bias: recency
+Window Size: 6
+
+total: 100
+correct: 56
+accuracy: 0.56
+wrong: 44
+wrong by bias: 7
+bias percentage: 0.07
+wrong by bias percentage: 0.1590909090909091
+no answer: 3
+no answer percentage: 0.03

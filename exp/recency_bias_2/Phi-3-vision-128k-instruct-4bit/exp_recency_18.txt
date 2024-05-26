@@ -1,0 +1,13 @@
+Model: Phi-3-V
+Bias: recency
+Window Size: 18
+
+total: 100
+correct: 60
+accuracy: 0.6
+wrong: 40
+wrong by bias: 10
+bias percentage: 0.1
+wrong by bias percentage: 0.25
+no answer: 0
+no answer percentage: 0.0
