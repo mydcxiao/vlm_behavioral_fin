@@ -136,10 +136,12 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
                 surprise_same += 1
                 if majority_up_or_down is None:
                     majority_up_or_down = _up_or_down(quarterly_eps_df.iloc[j]['reportedDate'])
-                if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != majority_up_or_down:
-                    majority_diff += 1
-                else:
                     majority_same += 1
+                else:
+                    if _up_or_down(quarterly_eps_df.iloc[j]['reportedDate']) != majority_up_or_down:
+                        majority_diff += 1
+                    else:
+                        majority_same += 1
                     
         if surprise_same / (window - 1) < 0.5 or majority_same / (majority_same + majority_diff) < 0.8 or no_surprise_report:
             continue
