@@ -5,10 +5,10 @@ export MODEL_CFG="config/model.json"
 export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="authoritative"
 export NUM_SAMPLES=100
-export SEED=0
+export SEED=42
 # export WINDOW_SIZE=5
 
-export CUR_ID=0
+export CUR_ID=2
 MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V")
 MAX_NEW_TOKENS=(512 512 512 512 512)
 TEMPERATURES=(0.0 0.0 0.2 0.7 0.0)

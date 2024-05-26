@@ -14,6 +14,7 @@ import io
 import re
 import random
 import warnings
+import base64
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -278,7 +279,7 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     background = "EPS (Earnings Per Share) is a widely used metric to gauge a company's profitability on a per-share basis. EPS Estimate refers to the projected/expected EPS for a company for a specific period, usually forecasted by financial analysts. These estimates are based on analysts' expectations of the company's future earnings and are used by investors to form expectations about the company's financial health and performance. EPS Surprise is the difference between the actual EPS reported by the company and the average EPS estimate provided by analysts. It's a key metric because it can significantly affect a stock's price. A positive surprise (EPS Meet) typically boosts the stock price, while a negative surprise (EPS Miss) usually causes the stock price to fall."
     criterion = "The question resolves Yes if and ONLY if you make a prediction of the probability between 0 and 1 UNDER ANY CIRCUMSTANCE."
     retrieved_info = "History of stock prices:\n{}\nHistory of EPS reports:\n{}\nSome facts:\n{}"
-    facts = f"- Fiscal end date and EPS report date are marked on the image. Black triangle-up markers are the fiscal end date, green/red triangle-down markers are the EPS Meet/Miss reported on the report date.\n- Over 80% of past instances with the same EPS outcome (Meet/Miss) as the latest report have seen the stock price {'going down' if bias else 'going up'} after the report.\n"
+    facts = f"- Fiscal end date and EPS report date are marked on the image. Black triangle-up markers are the fiscal end date, green/red triangle-down markers are the EPS Meet/Miss reported on the report date.\n- During the given period, over 80% of past instances with the same EPS outcome (Meet/Miss) as the latest report have seen the stock price {'going down' if bias else 'going up'} after the report. Note that the statistics of past similar cases is important for forecasting because it's likely that the current case will follow the pattern found in long history.\n"
     if args.bias_type == 'recency':
         bias_desc = f"The most recent past EPS report, which had the same outcome (EPS Meet/Miss) as the latest one, saw the stock price {'going up' if bias else 'going down'} after the report. Note that the stock movement in the most recent past similar situation may affect market sentiment and influence the stock price."
         facts += f"- {bias_desc}"
