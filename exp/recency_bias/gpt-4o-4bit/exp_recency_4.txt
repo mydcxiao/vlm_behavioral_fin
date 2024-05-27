@@ -1,0 +1,13 @@
+Model: gpt-4o
+Bias: recency
+Window Size: 4
+
+total: 100
+correct: 58
+accuracy: 0.58
+wrong: 42
+wrong by bias: 1
+bias percentage: 0.01
+wrong by bias percentage: 0.023809523809523808
+no answer: 1
+no answer percentage: 0.01

@@ -1,13 +1,13 @@
-Model: llava
+Model: gpt-4o
 Bias: recency
 Window Size: 12
 
 total: 100
-correct: 64
-accuracy: 0.64
-wrong: 36
+correct: 62
+accuracy: 0.62
+wrong: 38
 wrong by bias: 0
 bias percentage: 0.0
 wrong by bias percentage: 0.0
-no answer: 0
-no answer percentage: 0.0
+no answer: 1
+no answer percentage: 0.01

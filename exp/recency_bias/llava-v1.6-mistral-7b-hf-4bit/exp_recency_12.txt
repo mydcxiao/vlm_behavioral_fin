@@ -3,11 +3,11 @@ Bias: recency
 Window Size: 12
 
 total: 100
-correct: 54
-accuracy: 0.54
-wrong: 46
-wrong by bias: 16
-bias percentage: 0.16
-wrong by bias percentage: 0.34782608695652173
+correct: 64
+accuracy: 0.64
+wrong: 36
+wrong by bias: 0
+bias percentage: 0.0
+wrong by bias percentage: 0.0
 no answer: 0
 no answer percentage: 0.0

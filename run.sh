@@ -6,7 +6,7 @@ export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="recency"
 export NUM_SAMPLES=100
 export SEED=42
-export OPENAI_API_KEY="sk-proj-S0kFurQJ6vyGgjs3BxsAT3BlbkFJykyCu2CKKJUIE3EFzEWo"
+export OPENAI_API_KEY=""
 # export WINDOW_SIZE=5
 
 export CUR_ID=5

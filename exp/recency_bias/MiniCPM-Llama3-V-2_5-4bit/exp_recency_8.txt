@@ -6,8 +6,8 @@ total: 100
 correct: 63
 accuracy: 0.63
 wrong: 37
-wrong by bias: 7
-bias percentage: 0.07
-wrong by bias percentage: 0.1891891891891892
-no answer: 0
-no answer percentage: 0.0
+wrong by bias: 2
+bias percentage: 0.02
+wrong by bias percentage: 0.05405405405405406
+no answer: 1
+no answer percentage: 0.01
