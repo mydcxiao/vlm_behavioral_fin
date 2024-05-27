@@ -1,0 +1,13 @@
+Model: MobileVLM
+Bias: authoritative
+Window Size: 16
+
+total: 100
+correct: 52
+accuracy: 0.52
+wrong: 48
+wrong by bias: 25
+bias percentage: 0.25
+wrong by bias percentage: 0.5208333333333334
+no answer: 2
+no answer percentage: 0.02

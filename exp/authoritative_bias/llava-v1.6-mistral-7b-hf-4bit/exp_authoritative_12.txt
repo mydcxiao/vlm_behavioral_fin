@@ -1,0 +1,13 @@
+Model: llava
+Bias: authoritative
+Window Size: 12
+
+total: 100
+correct: 62
+accuracy: 0.62
+wrong: 38
+wrong by bias: 5
+bias percentage: 0.05
+wrong by bias percentage: 0.13157894736842105
+no answer: 0
+no answer percentage: 0.0

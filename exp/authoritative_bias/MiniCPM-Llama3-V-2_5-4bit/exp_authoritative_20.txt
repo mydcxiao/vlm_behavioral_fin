@@ -1,0 +1,13 @@
+Model: MiniCPM
+Bias: authoritative
+Window Size: 20
+
+total: 100
+correct: 60
+accuracy: 0.6
+wrong: 40
+wrong by bias: 26
+bias percentage: 0.26
+wrong by bias percentage: 0.65
+no answer: 0
+no answer percentage: 0.0

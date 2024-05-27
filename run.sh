@@ -3,7 +3,7 @@ export BSZ=4
 export TICKER=""
 export MODEL_CFG="config/model.json"
 export PROMPT_CFG="config/prompt.json"
-export BIAS_TYPE="authoritative"
+export BIAS_TYPE="recency"
 export NUM_SAMPLES=100
 export SEED=42
 export OPENAI_API_KEY="sk-proj-S0kFurQJ6vyGgjs3BxsAT3BlbkFJykyCu2CKKJUIE3EFzEWo"
@@ -17,8 +17,7 @@ export MODEL=${MODELS[$CUR_ID]}
 export MAX_NEW_TOKEN=${MAX_NEW_TOKENS[$CUR_ID]}
 export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
 
-# WINDOW_SIZES=(4 8 12 16 20)
-WINDOW_SIZES=(8 12 16 20)
+WINDOW_SIZES=(4 8 12 16 20)
 
 for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
     python gen.py \

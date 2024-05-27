@@ -1,0 +1,13 @@
+Model: gpt-4o
+Bias: authoritative
+Window Size: 4
+
+total: 100
+correct: 54
+accuracy: 0.54
+wrong: 46
+wrong by bias: 2
+bias percentage: 0.02
+wrong by bias percentage: 0.043478260869565216
+no answer: 0
+no answer percentage: 0.0

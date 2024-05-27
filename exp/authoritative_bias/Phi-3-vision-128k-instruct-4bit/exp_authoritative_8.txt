@@ -1,0 +1,13 @@
+Model: Phi-3-V
+Bias: authoritative
+Window Size: 8
+
+total: 100
+correct: 41
+accuracy: 0.41
+wrong: 59
+wrong by bias: 10
+bias percentage: 0.1
+wrong by bias percentage: 0.1694915254237288
+no answer: 10
+no answer percentage: 0.1
