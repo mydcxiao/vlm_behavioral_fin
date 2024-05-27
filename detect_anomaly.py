@@ -164,8 +164,8 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
 
     
 if __name__ == '__main__':
-    # bias_data, bias, gt= detect_recency_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/")
-    bias_data, bias, gt= detect_authoritative_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=20)
+    bias_data, bias, gt= detect_recency_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=4)
+    # bias_data, bias, gt= detect_authoritative_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=20)
     print(len(bias_data))
     print(bias_data)
     print(len(bias))
