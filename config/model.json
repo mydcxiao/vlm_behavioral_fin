@@ -7,8 +7,8 @@
         },
         "model_id": "meta-llama/Llama-2-7b-chat-hf"
     },
-    "gpt-4": {
-        "model_id": "gpt-4-turbo"
+    "gpt-4o": {
+        "model_id": "gpt-4o"
     },
     "llava": {
         "model_id": "llava-hf/llava-v1.6-mistral-7b-hf"

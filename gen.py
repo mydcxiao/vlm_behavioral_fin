@@ -105,23 +105,57 @@ class client(object):
     def query(self, batched_message, batched_image=None):
         if self.openai:
             if batched_image is not None:
-                raise NotImplementedError("Image input is not implemented for OpenAI API")
-            
-            batched_response = []
-            for message in batched_message:
-                retry = 3
-                while retry > 0:
-                    try:
-                        completion = self.client.chat.completions.create(
-                            model=self.model,
-                            messages=[{"role": "user", "content": message}],
-                        )
-                    except:
-                        retry -= 1
-                        completion = None
-                        time.sleep(10)
-                
-                batched_response.append(completion.choices[0].message.content) if completion else batched_response.append("Missing")
+                batched_response = []
+                for message, image in zip(batched_message, batched_image):
+                    image_64 = base64.b64encode(image.getvalue()).decode('utf-8')
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            completion = self.client.chat.completions.create(
+                                model=self.model,
+                                messages=[
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": message,
+                                            },
+                                            {
+                                                "type": "image_url",
+                                                "image_url": {
+                                                    "url": f"data:image/png;base64,{image_64}",
+                                                },
+                                            },
+                                        ],
+                                    }
+                                ],
+                                max_tokens=512,
+                            )
+                            break
+                        except:
+                            retry -= 1
+                            completion = None
+                            time.sleep(5)
+                    batched_response.append(completion.choices[0].message.content) if completion else batched_response.append("Missing")
+                            
+            else:
+                batched_response = []
+                for message in batched_message:
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            completion = self.client.chat.completions.create(
+                                model=self.model,
+                                messages=[{"role": "user", "content": message}],
+                            )
+                            break
+                        except:
+                            retry -= 1
+                            completion = None
+                            time.sleep(5)
+                    
+                    batched_response.append(completion.choices[0].message.content) if completion else batched_response.append("Missing")
             
             return batched_response
         
@@ -136,10 +170,11 @@ class client(object):
                     try:
                         payload = {"inputs": message}
                         response = requests.post(self.url, headers=self.headers, json=payload)
+                        break
                     except:
                         retry -= 1
                         response = None
-                        time.sleep(10)
+                        time.sleep(5)
                     
                 batched_response.append(response.json()[0]['generated_text']) if response else batched_response.append("Missing")
             
@@ -171,17 +206,18 @@ class client(object):
             
 def init_model(model_dict, args):
     if args.api:
-        if args.model in model_dict:
+        if 'gpt' in args.model:
+            model = model_dict[args.model]['model_id']
+            return client(model=model, openai=True)
+        elif args.model in model_dict:
             if 'API_URL' in model_dict[args.model]:
+                assert args.token, "API token is required for API model"
                 url = model_dict[args.model]['API_URL']
                 headers = model_dict[args.model]['headers']
                 headers['Authorization'] = f"Bearer {args.token}"
                 return client(url=url, headers=headers, openai=False)
             else:
                 raise ValueError(f"'API_URL' not found in model.json for model {args.model}")
-        elif 'gpt' in args.model:
-            model = model_dict[args.model]['model_id']
-            return client(model=model, openai=True)
         else:
             raise ValueError(f"Model {args.model} not found in model.json")
     else:
@@ -565,9 +601,13 @@ def main():
             batched_imgbuf.append(image_buf)
             batched_bias.append(bias)
             batched_gt.append(gt)
-       
+        
+        batched_imgbuf = batched_imgbuf if args.image else None
         batched_image = [Image.open(buf).convert('RGB') for buf in batched_imgbuf] if args.image else None
-        batched_response = client.query(batched_message, batched_image)
+        if client.openai:
+            batched_response = client.query(batched_message, batched_imgbuf)
+        else:
+            batched_response = client.query(batched_message, batched_image)
         batched_response = [construct_assistant_message(response, split) for response in batched_response]
         batched_answer = [parse_answer(response, pattern) for response in batched_response]
         

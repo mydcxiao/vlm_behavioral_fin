@@ -6,17 +6,19 @@ export PROMPT_CFG="config/prompt.json"
 export BIAS_TYPE="authoritative"
 export NUM_SAMPLES=100
 export SEED=42
+export OPENAI_API_KEY="sk-proj-S0kFurQJ6vyGgjs3BxsAT3BlbkFJykyCu2CKKJUIE3EFzEWo"
 # export WINDOW_SIZE=5
 
-export CUR_ID=2
-MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V")
-MAX_NEW_TOKENS=(512 512 512 512 512)
-TEMPERATURES=(0.0 0.0 0.2 0.7 0.0)
+export CUR_ID=5
+MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V" "gpt-4o")
+MAX_NEW_TOKENS=(512 512 512 512 512 512)
+TEMPERATURES=(0.0 0.0 0.2 0.7 0.0 1.0)
 export MODEL=${MODELS[$CUR_ID]}
 export MAX_NEW_TOKEN=${MAX_NEW_TOKENS[$CUR_ID]}
 export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
 
-WINDOW_SIZES=(4 8 12 16 20)
+# WINDOW_SIZES=(4 8 12 16 20)
+WINDOW_SIZES=(8 12 16 20)
 
 for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
     python gen.py \
@@ -33,6 +35,7 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --seed $SEED \
      --image \
      --load_4bit \
+     --api \
     #  --save_image \
     #  --load_8bit \
     #  --batch_inference \
