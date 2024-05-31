@@ -6,10 +6,14 @@
 - ✅ build batched inference for massive data
 - ✅ conduct pilot exp
 - ✅ test prompt template
-- :x: implement other bias detection
-- :x: conduct full experiments
+- ✅ implement other bias detection
+- ✅ conduct full experiments
 
 ## Generation
+```shell
+run.sh
+```
+OR
 ```shell
 python gen.py --model llava --image --quant --ticker AAPL AMZN
 ```
@@ -22,7 +26,7 @@ python eval.py --path exp.json
 ## Prediction
 LLM:
 ```shell
-python predict.py --model llama --start_time "2020-12-01" --end_time "2021-01-01"
+python predict.py --model llava --start_time "2020-12-01" --end_time "2021-01-01"
 ```
 
 --------
