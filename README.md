@@ -1,4 +1,4 @@
-# Behavior Bias of Vision-Language Models: A Behavioral Finance View
+# Behavioral Bias of Vision-Language Models: A Behavioral Finance View
 
 ## Generation
 ```shell
