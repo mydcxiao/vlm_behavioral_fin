@@ -1,13 +1,4 @@
-# Recency Bias of Large Language Model in Predicting Market
-
-## TODO:
-- ✅ implement LLM inference
-- ✅ implement multimodal inference
-- ✅ build batched inference for massive data
-- ✅ conduct pilot exp
-- ✅ test prompt template
-- ✅ implement other bias detection
-- ✅ conduct full experiments
+# Behavior Bias of Vision-Language Models: A Behavioral Finance View
 
 ## Generation
 ```shell
