@@ -36,15 +36,19 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Mobile
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
 from detect_anomaly import detect_recency_bias, detect_authoritative_bias
-from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices
+from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices, fetch_and_save_eps
 from utils import inference_func, load_pretrained_func, get_model_name, set_all_seeds
 
 
 def args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default="llama-chat", help='Model name')
+    parser.add_argument('--model', type=str, default="llava", help='Model name')
     parser.add_argument('--api', action='store_true', default=False, help='Use API')
     parser.add_argument('--token', type=str, default="", help='API token')
+    parser.add_argument('--eps_key', type=str, default="", help='API key for fetching EPS data')
+    parser.add_argument('--collect_data', action='store_true', default=False, help='Collect data or not')
+    parser.add_argument('--collect_price', action='store_true', default=False, help='Collect stock price data')
+    parser.add_argument('--collect_eps', action='store_true', default=False, help='Collect EPS data')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
     parser.add_argument('--prompt_cfg', type=str, default="config/prompt.json", help='Prompt JSON file')
     parser.add_argument('--model_cfg', type=str, default="config/model.json", help='Model JSON file')
@@ -539,16 +543,29 @@ def main():
         tickers = tickers[:500]
     else:
         tickers = args.ticker
+    
+    # collect real-time data if enabled
+    if args.collect_data:
+        print("Collecting stock price and EPS data...")
+        fetch_and_save_prices(tickers, save_path=args.stock_file)
+        fetch_and_save_eps(tickers, args.eps_key, save_dir=args.eps_dir)
+    elif args.collect_price:
+        print("Collecting stock price data only...")
+        fetch_and_save_prices(tickers, save_path=args.stock_file)
+    elif args.collect_eps:
+        print("Collecting EPS data only...")
+        fetch_and_save_eps(tickers, args.eps_key, save_dir=args.eps_dir)
+    else:
+        print("Data collection disabled! Make sure you have the data ready for evaluation!")
+    
+    # filter tickers with existing EPS data
     eps_files = os.listdir(args.eps_dir)
+    assert len(eps_files) > 0, 'No EPS data found! Please run with --collect_data or --collect_eps option to fetch and save EPS data.'
     tickers = [ticker for ticker in tickers if any(ticker == f.split('.')[0].split('-')[1] for f in eps_files)]
     
     # load stock data from file or fetch and save a new one if not exist
-    os.makedirs(os.path.dirname(args.stock_file), exist_ok=True)
-    if os.path.exists(args.stock_file):
-        stock_df = load_stock_data(args.stock_file)
-    else:
-        fetch_and_save_prices(tickers, save_path=args.stock_file)
-        stock_df = load_stock_data(args.stock_file)
+    assert os.path.exists(args.stock_file), 'stock price data file not found! Please run with --collect_data or --collect_price option to fetch and save stock price data.'
+    stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     
     # define bias detection function

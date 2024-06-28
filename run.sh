@@ -7,6 +7,8 @@ export BIAS_TYPE="recency"
 export NUM_SAMPLES=100
 export SEED=42
 export OPENAI_API_KEY=""
+export EPS_KEY=""
+export TOKEN=""
 # export WINDOW_SIZE=5
 
 export CUR_ID=5
@@ -24,6 +26,7 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --model $MODEL \
      --window_size $WINDOW_SIZE \
      --ticker $TICKER \
+     --eps_key $EPS_KEY \
      --batch_size $BSZ \
      --model_cfg $MODEL_CFG \
      --prompt_cfg $PROMPT_CFG \
@@ -34,8 +37,12 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --seed $SEED \
      --image \
      --load_4bit \
-     --api \
+    #  --api \
+    #  --token $TOKEN \
     #  --save_image \
     #  --load_8bit \
     #  --batch_inference \
+    #  --collect_data \
+    #  --collect_price \
+    #  --collect_eps \
 done
