@@ -1,4 +1,9 @@
 # Behavioral Bias of Vision-Language Models: A Behavioral Finance View
+### [Paper](https://openreview.net/pdf?id=VjMqF5YcEz)
+
+[Yuhang Xiao](https://mydcxiao.github.io),
+[Yudi Lin](https://github.com/LYDLYDLYDLYDLYD),
+[Ming-Chang Chiu](https://charismaticchiu.github.io)
 
 This is a preliminary implementation of the paper "Behavioral Bias of Vision-Language Models: A Behavioral Finance View".
 
