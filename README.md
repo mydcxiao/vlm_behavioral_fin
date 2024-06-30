@@ -1,5 +1,7 @@
 # Behavioral Bias of Vision-Language Models: A Behavioral Finance View
 
+This is a preliminary implementation of the paper "Behavioral Bias of Vision-Language Models: A Behavioral Finance View".
+
 ## Generation
 Run experiments for recency bias (`--bias_type recency`) and authority bias (`--bias_type authoritative`).
 
