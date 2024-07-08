@@ -538,7 +538,7 @@ def main():
     args.celebrity_cfg = celebrity_dict
     
     # get all possible tickers if no ticker is provided
-    if len(args.ticker) == 0:
+    if not args.ticker or len(args.ticker) == 0:
         tickers = tickers_sp500()
         tickers = tickers[:500]
     else:
