@@ -1,0 +1,13 @@
+Model: MiniCPM
+Bias: authority
+Window Size: 4
+
+total: 100
+correct: 47
+accuracy: 0.47
+wrong: 53
+wrong by bias: 23
+bias percentage: 0.23
+wrong by bias percentage: 0.4339622641509434
+no answer: 0
+no answer percentage: 0.0

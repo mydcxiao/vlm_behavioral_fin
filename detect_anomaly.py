@@ -85,7 +85,7 @@ def detect_recency_bias(ticker, stock_file, eps_dir, window=5):
     return bias_time, bias, gt
 
 
-def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
+def detect_authority_bias(ticker, stock_file, eps_dir, window=5):
     assert window > 1, "Window size must be greater than 1, otherwise, it only contains itself."
     dataframe = stock_file
     comp_stock = dataframe.xs(ticker, axis=1, level=1, drop_level=True)
@@ -165,7 +165,7 @@ def detect_authoritative_bias(ticker, stock_file, eps_dir, window=5):
     
 if __name__ == '__main__':
     bias_data, bias, gt= detect_recency_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=4)
-    # bias_data, bias, gt= detect_authoritative_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=20)
+    # bias_data, bias, gt= detect_authority_bias("AAPL", pd.read_csv("data/stock_history.csv", header=[0, 1], index_col=0), "data/eps_history/", window=20)
     print(len(bias_data))
     print(bias_data)
     print(len(bias))

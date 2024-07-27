@@ -8,7 +8,7 @@
 This is a preliminary implementation of the paper "Behavioral Bias of Vision-Language Models: A Behavioral Finance View".
 
 ## Generation
-Run experiments for recency bias (`--bias_type recency`) and authority bias (`--bias_type authoritative`).
+Run experiments for recency bias (`--bias_type recency`) and authority bias (`--bias_type authority`).
 
 Full experiments:
 ```shell
@@ -20,7 +20,7 @@ Experiments for specific companies (tickers) under a window size:
 python gen.py
   --model llava --image --load_4bit \
   --collect_data --eps_key "your alpha vantage key" \
-  --bias_type authoritative --window_size 8 --ticker AAPL AMZN
+  --bias_type authority --window_size 8 --ticker AAPL AMZN
 ```
 
 ## Evaluation

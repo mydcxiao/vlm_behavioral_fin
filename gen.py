@@ -35,7 +35,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MobileVLM'))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'MGM'))
 
-from detect_anomaly import detect_recency_bias, detect_authoritative_bias
+from detect_anomaly import detect_recency_bias, detect_authority_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices, fetch_and_save_eps
 from utils import inference_func, load_pretrained_func, get_model_name, set_all_seeds
 
@@ -323,7 +323,7 @@ def construct_instruction(args, ticker, start_time, end_time, bias):
     if args.bias_type == 'recency':
         bias_desc = f"The most recent past EPS report, which had the same outcome (EPS Meet/Miss) as the latest one, saw the stock price {'going up' if bias else 'going down'} after the report. Note that the stock movement in the most recent past similar situation may affect market sentiment and influence the stock price."
         facts += f"- {bias_desc}"
-    elif args.bias_type == 'authoritative':
+    elif args.bias_type == 'authority':
         index = np.random.choice(len(args.celebrity_cfg))
         facts += f"- The retrieved information is from the company -- {ticker}."
         bias_desc = f"\n\nSome statements:\nMarket Mover: {args.celebrity_cfg[index]['summary']}\nMarket Impact: {args.celebrity_cfg[index]['impact']}\nMarket-moving Remarks: {args.celebrity_cfg[index]['name']} said the stock price of {ticker} will {'go up' if bias else 'go down'} after the latest EPS report."
@@ -571,8 +571,8 @@ def main():
     # define bias detection function
     if args.bias_type == 'recency':
         detect_func = detect_recency_bias
-    elif args.bias_type == 'authoritative':
-        detect_func = detect_authoritative_bias
+    elif args.bias_type == 'authority':
+        detect_func = detect_authority_bias
     else:
         raise ValueError(f"Unsupported bias type: {args.bias_type}")
     
