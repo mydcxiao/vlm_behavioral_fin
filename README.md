@@ -1,5 +1,5 @@
 # Behavioral Bias of Vision-Language Models: A Behavioral Finance View
-### [Paper](https://openreview.net/pdf?id=VjMqF5YcEz)
+### [Paper](https://openreview.net/pdf?id=VjMqF5YcEz) | [Poster](https://drive.google.com/file/d/1is7mfQ6rx9xnwPhAcbVG_zGSGjV_fdMB/view?usp=sharing)
 
 [Yuhang Xiao](https://mydcxiao.github.io),
 [Yudi Lin](https://github.com/LYDLYDLYDLYDLYD),
