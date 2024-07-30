@@ -15,13 +15,14 @@ def args_parser():
 def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
-    try:
-        number = float(parts[-1])
-        if number < 0 or number > 1:
-            return None
-        return 1 if number >= 0.5 else 0
-    except:
-        return None
+    for part in parts[::-1][:2]:
+        try:
+            number = float(part)
+        except:
+            continue
+        if 0 <= number <= 1:
+            return 1 if number >= 0.5 else 0
+    return None
     
 
 if __name__ == '__main__':
