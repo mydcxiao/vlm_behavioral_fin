@@ -7,6 +7,7 @@ export BIAS_TYPE="recency"
 export NUM_SAMPLES=100
 export SEED=42
 export OPENAI_API_KEY=""
+export ANTHROPIC_API_KEY=""
 export EPS_KEY=""
 export TOKEN=""
 # export WINDOW_SIZE=5

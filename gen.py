@@ -21,10 +21,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import matplotlib.dates as mdates
+from functools import partial
 from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
-from functools import partial
+from anthropic import Anthropic
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import AutoConfig, GenerationConfig, PretrainedConfig
 from transformers import BitsAndBytesConfig
@@ -95,11 +96,12 @@ def load_stock_data(path):
 
 
 class client(object):
-    def __init__(self, url=None, headers=None, openai=False, model=None, pipe=None, gen_cfg=None, image_input=False, batch_inference=False):
+    def __init__(self, url=None, headers=None, openai=False, anthropic= False, model=None, pipe=None, gen_cfg=None, image_input=False, batch_inference=False):
         self.url = url
         self.headers = headers
         self.openai = openai
-        self.client = OpenAI() if openai else None
+        self.anthropic = anthropic
+        self.client = OpenAI() if openai else Anthropic() if anthropic else None
         self.model = model
         self.pipe = pipe
         self.gen_cfg = gen_cfg
@@ -163,6 +165,64 @@ class client(object):
             
             return batched_response
         
+        elif self.anthropic:
+            if batched_image is not None:
+                batched_response = []
+                for message, image in zip(batched_message, batched_image):
+                    image_64 = base64.b64encode(image.getvalue()).decode('utf-8')
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            completion = self.client.messages.create(
+                                model=self.model,
+                                messages=[
+                                    {
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": message,
+                                            },
+                                            {
+                                                "type": "image",
+                                                "source": {
+                                                    "type": "base64",
+                                                    "media_type": "image/png",
+                                                    "data": image_64,
+                                                },
+                                            },
+                                        ],
+                                    }
+                                ],
+                                max_tokens=512,
+                            )
+                            break
+                        except:
+                            retry -= 1
+                            completion = None
+                            time.sleep(5)
+                    batched_response.append(completion.content[0].text) if completion else batched_response.append("Missing")
+                            
+            else:
+                batched_response = []
+                for message in batched_message:
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            completion = self.client.messages.create(
+                                model=self.model,
+                                messages=[{"role": "user", "content": message}],
+                            )
+                            break
+                        except:
+                            retry -= 1
+                            completion = None
+                            time.sleep(5)
+                    
+                    batched_response.append(completion.content[0].text) if completion else batched_response.append("Missing")
+            
+            return batched_response
+        
         elif not self.pipe:
             if batched_image is not None:
                 raise NotImplementedError("Vision2Seq task is not implemented for Hugging Face Inference API")
@@ -213,13 +273,16 @@ def init_model(model_dict, args):
         if 'gpt' in args.model:
             model = model_dict[args.model]['model_id']
             return client(model=model, openai=True)
+        elif 'claude' in args.model:
+            model = model_dict[args.model]['model_id']
+            return client(model=model, anthropic=True)
         elif args.model in model_dict:
             if 'API_URL' in model_dict[args.model]:
                 assert args.token, "API token is required for API model"
                 url = model_dict[args.model]['API_URL']
                 headers = model_dict[args.model]['headers']
                 headers['Authorization'] = f"Bearer {args.token}"
-                return client(url=url, headers=headers, openai=False)
+                return client(url=url, headers=headers)
             else:
                 raise ValueError(f"'API_URL' not found in model.json for model {args.model}")
         else:
@@ -621,7 +684,7 @@ def main():
         
         batched_imgbuf = batched_imgbuf if args.image else None
         batched_image = [Image.open(buf).convert('RGB') for buf in batched_imgbuf] if args.image else None
-        if client.openai:
+        if client.openai or client.anthropic:
             batched_response = client.query(batched_message, batched_imgbuf)
         else:
             batched_response = client.query(batched_message, batched_image)
