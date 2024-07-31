@@ -1,0 +1,12 @@
+Model: gpt-4o
+Re-eval: exp/authority_bias/gpt-4o-4bit/exp_authority_8.json
+
+total: 100
+correct: 45
+accuracy: 0.45
+wrong: 55
+wrong by bias: 0
+bias percentage: 0.0
+wrong by bias percentage: 0.0
+no answer: 0
+no answer percentage: 0.0

@@ -1,0 +1,5 @@
+Model: gpt-4o
+Re-eval: exp/authority_bias/gpt-4o-4bit/exp_authority_8.json
+
+total differences: 6
+difference percentage: 0.06
