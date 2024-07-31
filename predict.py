@@ -427,7 +427,7 @@ def construct_images(file, dir, ticker, start, end):
                 comp_stock, type='candle', mav=(7), style='yahoo', 
                 panel_ratios=(2,1), 
                 figratio=(fig_width, fig_height),
-                figscale=1 * min(1, date_range / 120),
+                figscale=1,
                 title=f'{ticker} stock price chart with EPS Dates', ylabel='Stock Price', 
                 volume=True, show_nontrading=True, returnfig=True,
                 ylim=(price_min - price_buffer, price_max + price_buffer),
@@ -437,7 +437,7 @@ def construct_images(file, dir, ticker, start, end):
                 comp_stock, type='line', mav=(), style='yahoo', 
                 panel_ratios=(2,1), 
                 figratio=(fig_width, fig_height),
-                figscale=1 * min(1, date_range / 120),
+                figscale=1,
                 title=f'{ticker} stock price chart with EPS Dates', ylabel='Stock Price', 
                 volume=True, show_nontrading=True, returnfig=True,
                 ylim=(price_min - price_buffer, price_max + price_buffer),
@@ -475,15 +475,13 @@ def construct_images(file, dir, ticker, start, end):
 def parse_answer(response, pattern):
     parts = pattern.findall(response)
     
-    for part in parts[::-1][:3]:
+    for part in parts[::-1][:2]:
         try:
             number = float(part)
         except:
             continue
         if 0 <= number <= 1:
             return 1 if number >= 0.5 else 0
-        if 0 <= number <= 100:
-            return 1 if number >= 50 else 0
     return None
 
 

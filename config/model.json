@@ -10,6 +10,9 @@
     "gpt-4o": {
         "model_id": "gpt-4o"
     },
+    "claude-3-5": {
+        "model_id": "claude-3-5-sonnet-20240620"
+    },
     "llava": {
         "model_id": "llava-hf/llava-v1.6-mistral-7b-hf"
     },
