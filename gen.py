@@ -26,6 +26,7 @@ from PIL import Image
 from tqdm import tqdm
 from openai import OpenAI
 from anthropic import Anthropic
+import google.generativeai as genai
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from transformers import AutoConfig, GenerationConfig, PretrainedConfig
 from transformers import BitsAndBytesConfig
@@ -40,6 +41,10 @@ from detect_anomaly import detect_recency_bias, detect_authority_bias
 from data.fetch_sp500 import tickers_sp500, fetch_and_save_prices, fetch_and_save_eps
 from utils import inference_func, load_pretrained_func, get_model_name, set_all_seeds
 
+try:
+    genai.configure(api_key=os.environ['API_KEY'])
+except:
+    print("Error when configuring API key. Please set API_KEY to use Google GenAI API.")
 
 def args_parser():
     parser = argparse.ArgumentParser()
@@ -96,12 +101,13 @@ def load_stock_data(path):
 
 
 class client(object):
-    def __init__(self, url=None, headers=None, openai=False, anthropic= False, model=None, pipe=None, gen_cfg=None, image_input=False, batch_inference=False):
+    def __init__(self, url=None, headers=None, openai=False, anthropic=False, gemini=False, model=None, pipe=None, gen_cfg=None, image_input=False, batch_inference=False):
         self.url = url
         self.headers = headers
         self.openai = openai
         self.anthropic = anthropic
-        self.client = OpenAI() if openai else Anthropic() if anthropic else None
+        self.gemini = gemini
+        self.client = OpenAI() if openai else Anthropic() if anthropic else genai if gemini else None
         self.model = model
         self.pipe = pipe
         self.gen_cfg = gen_cfg
@@ -194,7 +200,7 @@ class client(object):
                                         ],
                                     }
                                 ],
-                                max_tokens=512,
+                                max_tokens=1024,
                             )
                             break
                         except:
@@ -202,7 +208,7 @@ class client(object):
                             completion = None
                             time.sleep(5)
                     batched_response.append(completion.content[0].text) if completion else batched_response.append("Missing")
-                            
+            
             else:
                 batched_response = []
                 for message in batched_message:
@@ -221,6 +227,39 @@ class client(object):
                     
                     batched_response.append(completion.content[0].text) if completion else batched_response.append("Missing")
             
+            return batched_response
+                               
+        elif self.gemini:
+            if batched_image is not None:
+                model = self.client.GenerativeModel(self.model)
+                batched_response = []
+                for message, image in zip(batched_message, batched_image):
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            response = model.generate_content([message, image])
+                            break
+                        except:
+                            retry -= 1
+                            response = None
+                            time.sleep(5)
+                    batched_response.append(response.text) if response else batched_response.append("Missing")
+            
+            else:
+                model = self.client.GenerativeModel(self.model)
+                batched_response = []
+                for message in batched_message:
+                    retry = 3
+                    while retry > 0:
+                        try:
+                            response = model.generate_content(message)
+                            break
+                        except:
+                            retry -= 1
+                            response = None
+                            time.sleep(5)
+                    batched_response.append(response.text) if response else batched_response.append("Missing")
+                    
             return batched_response
         
         elif not self.pipe:
@@ -276,6 +315,9 @@ def init_model(model_dict, args):
         elif 'claude' in args.model:
             model = model_dict[args.model]['model_id']
             return client(model=model, anthropic=True)
+        elif 'gemini' in args.model:
+            model = model_dict[args.model]['model_id']
+            return client(model=model, gemini=True)
         elif args.model in model_dict:
             if 'API_URL' in model_dict[args.model]:
                 assert args.token, "API token is required for API model"

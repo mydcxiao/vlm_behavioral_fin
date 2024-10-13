@@ -16,7 +16,7 @@ def tickers_sp500():
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    table = soup.find('table', {'class': 'wikitable sortable'})
+    table = soup.find('table', {'id': 'constituents'})
     sp_tickers = []
     for row in table.findAll('tr')[1:]:
         ticker = row.findAll('td')[0].text.strip()

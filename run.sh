@@ -8,14 +8,14 @@ export NUM_SAMPLES=100
 export SEED=42
 export OPENAI_API_KEY=""
 export ANTHROPIC_API_KEY=""
+export API_KEY=""
 export EPS_KEY=""
 export TOKEN=""
-# export WINDOW_SIZE=5
 
-export CUR_ID=5
-MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V" "gpt-4o")
-MAX_NEW_TOKENS=(512 512 512 512 512 512)
-TEMPERATURES=(0.0 0.0 0.2 0.7 0.0 1.0)
+export CUR_ID=6
+MODELS=("llava" "MobileVLM" "MGM" "MiniCPM" "Phi-3-V" "gpt-4o" "claude-3-5" "gemini-1.5-pro")
+MAX_NEW_TOKENS=(512 512 512 512 512 512 1024 2048)
+TEMPERATURES=(0.0 0.0 0.2 0.7 0.0 1.0 0.0 0.0)
 export MODEL=${MODELS[$CUR_ID]}
 export MAX_NEW_TOKEN=${MAX_NEW_TOKENS[$CUR_ID]}
 export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
@@ -27,7 +27,6 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --model $MODEL \
      --window_size $WINDOW_SIZE \
      --ticker $TICKER \
-     --eps_key $EPS_KEY \
      --batch_size $BSZ \
      --model_cfg $MODEL_CFG \
      --prompt_cfg $PROMPT_CFG \
@@ -38,7 +37,7 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --seed $SEED \
      --image \
      --load_4bit \
-    #  --api \
+     --api \
     #  --token $TOKEN \
     #  --save_image \
     #  --load_8bit \
@@ -46,4 +45,5 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
     #  --collect_data \
     #  --collect_price \
     #  --collect_eps \
+    #  --eps_key $EPS_KEY \
 done
