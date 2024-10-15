@@ -23,6 +23,7 @@ export TEMPERATURE=${TEMPERATURES[$CUR_ID]}
 WINDOW_SIZES=(4 8 12 16 20)
 
 for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
+    # BIAS_DATA="./exp/${BIAS_TYPE}_bias/gpt-4o/exp_${BIAS_TYPE}_${WINDOW_SIZE}.json"
     python gen.py \
      --model $MODEL \
      --window_size $WINDOW_SIZE \
@@ -36,8 +37,9 @@ for WINDOW_SIZE in "${WINDOW_SIZES[@]}"; do
      --num_samples $NUM_SAMPLES \
      --seed $SEED \
      --image \
-     --load_4bit \
      --api \
+    #  --bias_data $BIAS_DATA \
+    #  --load_4bit \
     #  --token $TOKEN \
     #  --save_image \
     #  --load_8bit \

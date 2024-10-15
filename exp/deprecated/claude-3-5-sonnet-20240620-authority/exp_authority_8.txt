@@ -1,0 +1,13 @@
+Model: claude-3-5
+Bias: authority
+Window Size: 8
+
+total: 100
+correct: 48
+accuracy: 0.48
+wrong: 52
+wrong by bias: 2
+bias percentage: 0.02
+wrong by bias percentage: 0.038461538461538464
+no answer: 0
+no answer percentage: 0.0

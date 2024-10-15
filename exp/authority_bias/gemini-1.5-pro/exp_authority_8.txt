@@ -1,0 +1,13 @@
+Model: gemini-1.5-pro
+Bias: authority
+Window Size: 8
+
+total: 100
+correct: 43
+accuracy: 0.43
+wrong: 57
+wrong by bias: 8
+bias percentage: 0.08
+wrong by bias percentage: 0.14035087719298245
+no answer: 2
+no answer percentage: 0.02

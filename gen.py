@@ -75,6 +75,7 @@ def args_parser():
     parser.add_argument('--temperature', type=float, default=0.0, help='temperature for generation')
     parser.add_argument('--num_samples', type=int, default=100, help='number of samples to test')
     parser.add_argument('--seed', type=int, default=42, help='random seed')
+    parser.add_argument('--bias_data', type=str, default="", help='bias data JSON file path')
     
     return parser.parse_args()
 
@@ -673,24 +674,34 @@ def main():
     stock_df = load_stock_data(args.stock_file)
     args.stock_file = stock_df
     
-    # define bias detection function
-    if args.bias_type == 'recency':
-        detect_func = detect_recency_bias
-    elif args.bias_type == 'authority':
-        detect_func = detect_authority_bias
+    if not args.bias_data:
+        print("No bias data provided! Fetching bias data...")
+        # define bias detection function
+        if args.bias_type == 'recency':
+            detect_func = detect_recency_bias
+        elif args.bias_type == 'authority':
+            detect_func = detect_authority_bias
+        else:
+            raise ValueError(f"Unsupported bias type: {args.bias_type}")
+        
+        # retrieve bias data
+        bias_data = []
+        for ticker in tqdm(tickers, desc="Company: "):
+            time_period, bias, gt = detect_func(ticker, args.stock_file, args.eps_dir, window=args.window_size)
+            for i in range(len(time_period)):
+                bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
+        print(f"Finished fetching {len(bias_data)} bias datapoints!")
+        
+        # random select 100 samples for evaluation
+        bias_data = random.sample(bias_data, min(args.num_samples, len(bias_data)))
+    
     else:
-        raise ValueError(f"Unsupported bias type: {args.bias_type}")
-    
-    # evaluate bias
-    bias_data = []
-    for ticker in tqdm(tickers, desc="Company: "):
-        time_period, bias, gt = detect_func(ticker, args.stock_file, args.eps_dir, window=args.window_size)
-        for i in range(len(time_period)):
-            bias_data.append((ticker, time_period[i][0], time_period[i][1], bias[i], gt[i]))
-    print(f"Finished fetching {len(bias_data)} bias datapoints!")
-    
-    # random select 100 samples for evaluation
-    bias_data = random.sample(bias_data, min(args.num_samples, len(bias_data)))
+        print("Loading bias data...")
+        bias_list = json.load(open(args.bias_data, "r"))
+        bias_data = []
+        for bias in tqdm(bias_list):
+            bias_data.append((bias['ticker'], bias['start_time'], bias['end_time'], bias['bias'], bias['gt']))
+        print(f"Finished loading {len(bias_data)}/{len(bias_list)} bias datapoints!")
     
     # define output directory and output file
     os.makedirs(args.output_dir, exist_ok=True)

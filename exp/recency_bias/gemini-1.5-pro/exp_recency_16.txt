@@ -1,0 +1,13 @@
+Model: gemini-1.5-pro
+Bias: recency
+Window Size: 16
+
+total: 100
+correct: 50
+accuracy: 0.5
+wrong: 50
+wrong by bias: 3
+bias percentage: 0.03
+wrong by bias percentage: 0.06
+no answer: 1
+no answer percentage: 0.01

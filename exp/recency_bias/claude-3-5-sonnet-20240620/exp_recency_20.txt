@@ -1,0 +1,13 @@
+Model: claude-3-5
+Bias: recency
+Window Size: 20
+
+total: 100
+correct: 50
+accuracy: 0.5
+wrong: 50
+wrong by bias: 13
+bias percentage: 0.13
+wrong by bias percentage: 0.26
+no answer: 0
+no answer percentage: 0.0
